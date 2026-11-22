@@ -21,7 +21,7 @@ test('photo upload, measured polygon, persistent inventory, irregular layout and
   if(!b)throw Error('editor not visible');
   const click=async(x:number,y:number)=>page.mouse.click(b.x+b.width*x,b.y+b.height*y);
   await click(.1,.10);await click(.3,.10);
-  await page.getByRole('button',{name:/2\. Kontura/}).click();
+  await page.getByRole('button',{name:/3\. Kontura/}).click();
   for(const [x,y] of [[.16,.18],[.80,.18],[.80,.81],[.16,.81]])await click(x,y);
   await expect(page.getByText('Temena konture')).toBeVisible();
   await page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'}).click();

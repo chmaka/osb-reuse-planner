@@ -13,13 +13,22 @@ export interface Remnant {
   location: string;
   status: RemnantStatus;
   imageId?: string;
+  scanId?: string;
   calibrationMethod: 'two-point-manual';
   mmPerPx: number;
   revision: number;
   createdAt: string;
   updatedAt: string;
 }
-export interface ImageAsset { id: string; blob: Blob; mime: string; createdAt: string }
+export interface ImageAsset { id: string; blob: Blob; normalizedBlob?: Blob; mime: string; createdAt: string }
+export type PhotoSource='camera'|'upload';
+export interface ScanRecord {
+  id: string; imageId: string; status: 'CAPTURED'|'MEASURED';
+  source: PhotoSource; width: number; height: number;
+  qualityWarnings: string[]; conversion: 'native'|'heic-converted';
+  originalMime: string; originalName?: string;
+  createdAt: string; remnantId?: string;
+}
 export interface Part {
   id: string; name: string; polygonMm: Polygon; quantity: number;
   thicknessMm: number; material: string; allowQuarterTurns: boolean;

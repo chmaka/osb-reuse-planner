@@ -39,6 +39,12 @@ export default function CapturePanel({onCapture,onError}:Props){
     setActive(false);setTorch(false);setTorchSupported(false);setFocusSupported(false);setExposure(null);
   }
   useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;generation.current++;streamRef.current?.getTracks().forEach(t=>t.stop())}},[]);
+  useEffect(()=>{
+    if(active&&videoRef.current&&streamRef.current){
+      videoRef.current.srcObject=streamRef.current;
+      void videoRef.current.play().catch(()=>onError('Automatski video prikaz nije dostupan. Izaberi učitavanje fotografije.'));
+    }
+  },[active]);
   async function open(deviceId?:string){
     if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){
       onError('Kamera zahtijeva HTTPS ili localhost i browser koji podržava MediaDevices. Učitaj sliku.');

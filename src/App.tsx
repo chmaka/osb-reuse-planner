@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Activity, AlertTriangle, ArrowRight, Box, Camera, CheckCircle2,
   ChevronRight, ClipboardCheck, Download, Focus, Grid2x2, HardDrive,
   Layers3, Menu, Package, Play, Plus, RotateCcw, Ruler, Save, Search, Settings2,
-  ShieldAlert, Trash2, Upload, WifiOff
+  ShieldAlert, Trash2, WifiOff
 } from 'lucide-react';
-import { db, storeScan } from './db';
+import { db, storeCapturedPhoto, storeScan } from './db';
 import { area, box, isSimple, normalized } from './geometry';
 import { referenceDxf, downloadText } from './dxf';
-import type { NestingResult, Point, Remnant } from './types';
+import type { NestingResult, Point, Remnant, ScanRecord } from './types';
+import CapturePanel, { type PhotoSource } from './features/camera/CapturePanel';
+import { preparePhoto } from './features/camera/photo';
+import type { PhotoQuality } from './features/camera/quality';
 import type { SolveInput } from './solver';
 
 type Page = 'dashboard'|'scan'|'inventory'|'nesting'|'production'|'analytics'|'settings';
@@ -41,7 +44,7 @@ function PhotoThumbnail({imageId}:{imageId?:string}){
   useEffect(()=>{
     let url='';
     if(imageId) db.images.get(imageId).then(img=>{
-      if(img){url=URL.createObjectURL(img.blob);setSrc(url)}
+      if(img){url=URL.createObjectURL(img.normalizedBlob||img.blob);setSrc(url)}
     });
     return ()=>{if(url)URL.revokeObjectURL(url)};
   },[imageId]);
@@ -87,8 +90,10 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [image,setImage]=useState<Blob|null>(null);
   const [imageUrl,setImageUrl]=useState('');
   const [dimensions,setDimensions]=useState({w:0,h:0});
-  const [cameraActive,setCameraActive]=useState(false);
-  const [cameraError,setCameraError]=useState('');
+  const [processing,setProcessing]=useState(false);
+  const [quality,setQuality]=useState<PhotoQuality|null>(null);
+  const [scanRef,setScanRef]=useState<{id:string;imageId:string}|null>(null);
+  const capturedScans=useLiveQuery(()=>db.scans.where('status').equals('CAPTURED').toArray(),[])||[];
   const [captureError,setCaptureError]=useState('');
   const [mode,setMode]=useState<'scale'|'trace'>('scale');
   const [refPoints,setRefPoints]=useState<Point[]>([]);
@@ -98,52 +103,45 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [location,setLocation]=useState('Radionica');
   const [thickness,setThickness]=useState('18');
   const [busy,setBusy]=useState(false);
-  const videoRef=useRef<HTMLVideoElement>(null),streamRef=useRef<MediaStream|null>(null);
-  const fileRef=useRef<HTMLInputElement>(null);
   const scaleDistance=refPoints.length===2?Math.hypot(refPoints[0].x-refPoints[1].x,refPoints[0].y-refPoints[1].y):0;
   const mmPerPx=scaleDistance>0?Number(knownDistance)/scaleDistance:0;
   const polyMm=useMemo(()=>mmPerPx>0?normalized(contour.map(p=>({x:p.x*mmPerPx,y:p.y*mmPerPx}))):[],[contour,mmPerPx]);
   const polyBounds=polyMm.length>=3?box(polyMm):null;
   const traceValid=contour.length>=3 && isSimple(polyMm);
-  useEffect(()=>{return ()=>{streamRef.current?.getTracks().forEach(t=>t.stop())}},[]);
   useEffect(()=>{
     if(!image){setImageUrl('');return}
     const url=URL.createObjectURL(image);setImageUrl(url);
     return ()=>URL.revokeObjectURL(url);
   },[image]);
-  useEffect(()=>{
-    if(cameraActive&&videoRef.current&&streamRef.current){
-      videoRef.current.srcObject=streamRef.current;
-      void videoRef.current.play().catch(()=>setCameraError('Video nije moguće prikazati. Koristi učitavanje fotografije.'));
-    }
-  },[cameraActive]);
-  function stopCamera(){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCameraActive(false)}
-  async function startCamera(){
-    setCameraError('');setCaptureError('');
-    if(!navigator.mediaDevices?.getUserMedia){setCameraError('Kamera nije podržana ili stranica nije otvorena preko HTTPS. Učitaj fotografiju.');return}
+  async function acceptImage(raw:Blob, source:PhotoSource):Promise<void>{
+    setCaptureError('');setProcessing(true);
     try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
-      stopCamera();streamRef.current=stream;setCameraActive(true);
-    }catch(e){setCameraError('Kamera nije dostupna ('+String(e)+'). Učitaj fotografiju iz galerije.')}
+      const prepared=await preparePhoto(raw);
+      const saved=await storeCapturedPhoto(prepared.original,prepared.preview,{
+        source,width:prepared.width,height:prepared.height,
+        qualityWarnings:prepared.quality.notes,conversion:prepared.conversion,
+        originalName:raw instanceof File?raw.name:undefined
+      });
+      setDimensions({w:prepared.width,h:prepared.height});
+      setImage(prepared.preview);setQuality(prepared.quality);
+      setScanRef(saved);setRefPoints([]);setContour([]);setMode('scale');
+    }catch(error){
+      setCaptureError('Fotografija nije obrađena: '+String(error));
+      throw error;
+    }finally{setProcessing(false)}
   }
-  async function acceptImage(file:Blob){
-    stopCamera();setCaptureError('');
-    const url=URL.createObjectURL(file);
+  async function resumeCaptured(record:ScanRecord):Promise<void>{
+    setCaptureError('');setProcessing(true);
     try{
-      const bmp=await createImageBitmap(file);
-      if(bmp.width<80||bmp.height<80)throw new Error('Fotografija je premala.');
-      setDimensions({w:bmp.width,h:bmp.height});bmp.close();
-      setImage(file);setRefPoints([]);setContour([]);setMode('scale');
-    }catch{
-      setCaptureError('Format slike nije podržan u ovom browseru. Pretvori HEIC u JPEG ili PNG i pokušaj ponovo.');
-    }finally{URL.revokeObjectURL(url)}
-  }
-  function capture(){
-    const video=videoRef.current;
-    if(!video||video.videoWidth<80){setCameraError('Video nije spreman. Sačekaj prikaz ili učitaj fotografiju.');return}
-    const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;
-    c.getContext('2d')?.drawImage(video,0,0);
-    c.toBlob(b=>b?void acceptImage(b):setCaptureError('Snimak nije moguće sačuvati.'),'image/jpeg',0.94);
+      const asset=await db.images.get(record.imageId);
+      if(!asset)throw new Error('Nedostaje originalna fotografija.');
+      setImage(asset.normalizedBlob||asset.blob);
+      setDimensions({w:record.width,h:record.height});
+      setScanRef({id:record.id,imageId:record.imageId});
+      setQuality({issues:[],notes:record.qualityWarnings});
+      setRefPoints([]);setContour([]);setMode('scale');
+    }catch(error){setCaptureError(String(error))}
+    finally{setProcessing(false)}
   }
   function addPoint(e:ReactPointerEvent<SVGSVGElement>){
     if(!image||!dimensions.w)return;
@@ -156,12 +154,12 @@ function Scan({onSaved}:{onSaved:()=>void}){
     if(!image||!traceValid||mmPerPx<=0||!Number.isFinite(mmPerPx)||Number(thickness)<=0)return;
     setBusy(true);setCaptureError('');
     try{
-      const now=new Date().toISOString(),id=crypto.randomUUID(),imageId=crypto.randomUUID();
+      const now=new Date().toISOString(),id=crypto.randomUUID(),imageId=scanRef?.imageId||crypto.randomUUID();
       await storeScan({id,label:name.trim()||'OSB ostatak '+id.slice(0,6),material:'OSB',
         thicknessMm:Number(thickness),polygonMm:polyMm,holesMm:[],defectsMm:[],
         areaMm2:area(polyMm),location:location.trim()||'Nepoznato',status:'MEASURED',
         calibrationMethod:'two-point-manual',mmPerPx,revision:1,imageId,
-        createdAt:now,updatedAt:now},image);
+        scanId:scanRef?.id,createdAt:now,updatedAt:now},scanRef?undefined:image);
       onSaved();
     }catch(e){setCaptureError('Nije sačuvano: '+String(e))}
     finally{setBusy(false)}
@@ -171,23 +169,14 @@ function Scan({onSaved}:{onSaved:()=>void}){
     <div className="scan-layout">
       <div className="panel canvas-panel">
         <div className="canvas-top"><h2>Fotografija ostatka</h2><span className="tag">Samo lokalni podaci</span></div>
-        {!imageUrl && !cameraActive?<div className="capture-empty">
-          <div className="camera-orbit"><Camera size={36}/></div><h3>Dodaj fotografiju OSB ostatka</h3>
-          <p>Postavi ostatak na kontrastnu podlogu, obuhvati cio obod i priloži ravnu mjernu referencu u istoj ravni.</p>
-          <div className="action-row centered"><button className="primary" onClick={startCamera}><Camera size={18}/> Otvori kameru</button>
-            <button className="secondary" onClick={()=>fileRef.current?.click()}><Upload size={18}/> Učitaj sliku</button></div>
-        </div>:null}
-        {cameraActive?<div className="live-camera"><video ref={videoRef} playsInline muted autoPlay/>
-          <div className="camera-crosshair"/><div className="action-row camera-actions">
-            <button className="primary" onClick={capture}><Camera size={18}/> Fotografisi</button>
-            <button className="secondary" onClick={stopCamera}>Zatvori kameru</button></div></div>:null}
-        {imageUrl&&!cameraActive?<div className="image-editor">
+        {!imageUrl&&<CapturePanel onCapture={acceptImage} onError={setCaptureError}/>}
+        {imageUrl?<div className="image-editor">
           <div className="editor-toolbar"><div className="tabs">
             <button className={mode==='scale'?'tab active':'tab'} onClick={()=>setMode('scale')}><Ruler size={15}/> 1. Mjerilo</button>
             <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!(mmPerPx>0)}> <Focus size={15}/> 2. Kontura</button>
           </div><div className="toolbar-right">
             <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?setRefPoints(p=>p.slice(0,-1)):setContour(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
-            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setRefPoints([])}}><Trash2 size={17}/></button>
+            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setRefPoints([]);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
             <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint}>
@@ -201,9 +190,22 @@ function Scan({onSaved}:{onSaved:()=>void}){
           <div className="editor-hint">{mode==='scale'?
             'Dodirni dvije tačke na referentnoj dužini poznate veličine.': 'Dodiruj uglove redom duž oboda ostatka. Za zatvaranje konture automatski se spaja prva i posljednja tačka.'}</div>
         </div>:null}
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only"
-          onChange={e=>{const f=e.target.files?.[0];if(f)void acceptImage(f);e.target.value=''}}/>
-        {cameraError&&<Notice>{cameraError}</Notice>}
+        {processing&&<div className="scan-progress" role="status">Dekodiranje, provjera kvaliteta i lokalno čuvanje fotografije...</div>}
+        {!imageUrl&&capturedScans.length>0&&<section className="recovery-list">
+          <h3>Nedovršeni snimci · sačuvani offline</h3>
+          {capturedScans.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,6).map(s=>
+            <button key={s.id} className="recovery-row" disabled={processing}
+              onClick={()=>void resumeCaptured(s)}>
+              <span>{new Date(s.createdAt).toLocaleString('sr-RS')} · {s.width} × {s.height} px</span>
+              <strong>Nastavi mjerenje</strong>
+            </button>)}
+        </section>}
+        {imageUrl&&quality&&<div className="quality-panel" aria-label="Provjera kvaliteta fotografije">
+          <strong>Provjera fotografije</strong>
+          {quality.notes.length>0?quality.notes.map((note,i)=><p key={i}>⚠ {note}</p>):
+            <p>Nema prepoznatih očiglednih problema. Ipak ručno provjeri oštrinu, obod i mjerilo.</p>}
+          <small>Indikatori su upozorenja, ne izmjerena tačnost niti automatska potvrda.</small>
+        </div>}
       </div>
       <aside className="panel properties-panel">
         <h2>Parametri skeniranja</h2><p className="muted">Ručna metoda · bez perspektivne korekcije</p>

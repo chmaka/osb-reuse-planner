@@ -19,7 +19,8 @@
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "heic-to": "^1.6.7"
+    "heic-to": "^1.6.7",
+    "js-aruco2": "2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

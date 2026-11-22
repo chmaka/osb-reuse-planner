@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  Activity, AlertTriangle, ArrowLeft, ArrowRight, Box, Camera, CheckCircle2,
-  ChevronRight, ClipboardCheck, Download, FileImage, Focus, Grid2x2, HardDrive,
+  Activity, AlertTriangle, ArrowRight, Box, Camera, CheckCircle2,
+  ChevronRight, ClipboardCheck, Download, Focus, Grid2x2, HardDrive,
   Layers3, Menu, Package, Play, Plus, RotateCcw, Ruler, Save, Search, Settings2,
-  ShieldAlert, Trash2, Upload, WifiOff, X
+  ShieldAlert, Trash2, Upload, WifiOff
 } from 'lucide-react';
 import { db, storeScan } from './db';
-import { area, box, isSimple, normalized, rectangle } from './geometry';
+import { area, box, isSimple, normalized } from './geometry';
 import { referenceDxf, downloadText } from './dxf';
 import type { NestingResult, Point, Remnant } from './types';
 import type { SolveInput } from './solver';

@@ -22,6 +22,13 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // 3.2 MB HEIC decoder is downloaded and cached ONLY when needed.
+        globIgnores: ['**/assets/heic-to-*.js'],
+        runtimeCaching: [{
+          urlPattern: /\/assets\/heic-to-[^/]+\.js$/,
+          handler: 'CacheFirst',
+          options: {cacheName:'heic-decoder-on-demand',expiration:{maxEntries:3,maxAgeSeconds:60*60*24*90}}
+        }],
         cleanupOutdatedCaches: true
       }
     })

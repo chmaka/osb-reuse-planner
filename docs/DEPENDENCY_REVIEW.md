@@ -16,3 +16,8 @@
 | dxfjs/writer | MIT | Candidate for production-grade DXF; interim writer is reference-only and unvalidated in Cut2D. |
 
 Current adoption is intentionally small to prioritize offline UX, testability and safe geometry. A working POC on Android, Safari and Cut2D remains required before selecting further dependencies.
+
+## Phase 1 additions (2026-11-22)
+- **heic-to 1.6.7** (LGPL-3.0-or-later; [source](https://github.com/hoppergee/heic-to)). Used as a **dynamic import** of the CSP-safe build only for HEIC unsupported by native image decoding. The source and redistributable license must remain available; transitive libheif codec licensing and packaging must be checked at each upgrade. Original image bytes are retained. Context7 current TS overloads checked. Self-hosted chunks require no cloud converter.
+- **MediaDevices, MediaStreamTrack, ImageCapture** are Web APIs, not polyfills. ImageCapture is optional. Device and control availability determined through runtime capabilities and browser errors.
+- No AI weights included in app shell or required for scanning.

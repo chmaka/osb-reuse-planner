@@ -73,7 +73,7 @@ function Dashboard({remnants,onNavigate}:{remnants:Remnant[];onNavigate:(p:Page)
       <Metric title="Za fizičku provjeru" value={String(remnants.filter(r=>r.status==='MEASURED').length)} Icon={Ruler}/>
     </div>
     <section className="dashboard-grid">
-      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 1</div>
+      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 2</div>
         <h2>Od fotografije do digitalne konture.</h2>
         <p>Fotografiši ostatak, definiši dvije referentne tačke, unesi njihovo rastojanje u milimetrima i nacrtaj obod. Podaci se čuvaju lokalno.</p>
         <button className="light-button" onClick={()=>onNavigate('scan')}>Pokreni skeniranje <ArrowRight size={17}/></button>
@@ -515,7 +515,7 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 1 · PILOT</span></div>
+        <span className="version-pill">FAZA 2 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}

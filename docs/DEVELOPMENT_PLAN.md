@@ -26,3 +26,6 @@ Do not advance phase status until acceptance tests and human evidence exist.
 - Measured contour can be previewed in corrected metric 2D without raster warping; independent physical-distance check is required for projective calibration (max(2 mm, 2%) software acceptance threshold, not demonstrated physical accuracy). Extrapolation hard guard 12× reference radius.
 - Remnant calibration and independent check kept in IndexedDB with audit records; marked MEASURED, never promoted to CNC VERIFIED from software alone.
 - Optical lens distortion, subpixel corner refinement, homography conditioned with multi-marker board, true rectified photograph, validation on real scrap material remain future work. 
+
+### Phase 2 release gate
+Software functionality is implemented in the pilot but **not accepted for CNC**. Release is contingent on all GitHub Action checks, real Android and desktop camera checks, printed ArUco sample scaling, independent gauge checks across at least 20 actual OSB offcuts, and documented measurement error distribution. No approval is inferred by mathematical tests.

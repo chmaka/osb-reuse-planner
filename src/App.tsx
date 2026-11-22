@@ -14,6 +14,10 @@ import type { NestingResult, Point, Remnant, ScanRecord } from './types';
 import CapturePanel, { type PhotoSource } from './features/camera/CapturePanel';
 import { preparePhoto } from './features/camera/photo';
 import type { PhotoQuality } from './features/camera/quality';
+import { detectAruco, generateMarkerSvg } from './features/calibration/aruco';
+import type { DetectedMarker } from './features/calibration/aruco';
+import { makeProjectiveCalibration, mapContourToMm, checkIndependentDistance, calibrationExtrapolationRatio, rectifiedContourView } from './features/calibration/homography';
+import type { ProjectiveCalibration, Quad } from './features/calibration/homography';
 import type { SolveInput } from './solver';
 
 type Page = 'dashboard'|'scan'|'inventory'|'nesting'|'production'|'analytics'|'settings';
@@ -95,7 +99,19 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [scanRef,setScanRef]=useState<{id:string;imageId:string}|null>(null);
   const capturedScans=useLiveQuery(()=>db.scans.where('status').equals('CAPTURED').toArray(),[])||[];
   const [captureError,setCaptureError]=useState('');
-  const [mode,setMode]=useState<'scale'|'trace'>('scale');
+  const [mode,setMode]=useState<'scale'|'trace'|'check'>('scale');
+  const [calMode,setCalMode]=useState<'line'|'rectangle'|'marker'>('line');
+  const [quadPoints,setQuadPoints]=useState<Point[]>([]);
+  const [cardWidth,setCardWidth]=useState('210');
+  const [cardHeight,setCardHeight]=useState('297');
+  const [markerSize,setMarkerSize]=useState('80');
+  const [markerId,setMarkerId]=useState('0');
+  const [markers,setMarkers]=useState<DetectedMarker[]>([]);
+  const [chosenMarker,setChosenMarker]=useState<number|null>(null);
+  const [detecting,setDetecting]=useState(false);
+  const [checkPoints,setCheckPoints]=useState<Point[]>([]);
+  const [checkDistance,setCheckDistance]=useState('100');
+  const [showCorrected,setShowCorrected]=useState(false);
   const [refPoints,setRefPoints]=useState<Point[]>([]);
   const [contour,setContour]=useState<Point[]>([]);
   const [knownDistance,setKnownDistance]=useState('100');
@@ -105,9 +121,44 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [busy,setBusy]=useState(false);
   const scaleDistance=refPoints.length===2?Math.hypot(refPoints[0].x-refPoints[1].x,refPoints[0].y-refPoints[1].y):0;
   const mmPerPx=scaleDistance>0?Number(knownDistance)/scaleDistance:0;
-  const polyMm=useMemo(()=>mmPerPx>0?normalized(contour.map(p=>({x:p.x*mmPerPx,y:p.y*mmPerPx}))):[],[contour,mmPerPx]);
+  const selectedMarker=markers.find(m=>m.id===chosenMarker);
+  const activeCorners=calMode==='rectangle'?quadPoints:calMode==='marker'?selectedMarker?.corners:undefined;
+  const calibrationState=useMemo(()=>{
+    if(calMode==='line')return {value:null as ProjectiveCalibration|null,error:''};
+    if(!activeCorners||activeCorners.length!==4)return {value:null as ProjectiveCalibration|null,error:''};
+    try {
+      const w=Number(calMode==='rectangle'?cardWidth:markerSize);
+      const h=Number(calMode==='rectangle'?cardHeight:markerSize);
+      return {value:makeProjectiveCalibration(
+        calMode==='rectangle'?'manual-rectangle':'aruco-single',
+        activeCorners as Quad,w,h,calMode==='marker'?chosenMarker??undefined:undefined),error:''};
+    } catch(e){return {value:null as ProjectiveCalibration|null,error:String(e)}}
+  },[calMode,quadPoints,chosenMarker,markers,cardWidth,cardHeight,markerSize]);
+  const calibration=calibrationState.value;
+  const calibrated=calMode==='line'?mmPerPx>0&&Number.isFinite(mmPerPx):!!calibration;
+  const transformed=useMemo(()=>{
+    try {
+      if(!calibrated||!contour.length)return {points:[] as Point[],error:''};
+      const points=calibration?mapContourToMm(contour,calibration.pixelToMm):
+        normalized(contour.map(p=>({x:p.x*mmPerPx,y:p.y*mmPerPx})));
+      return {points,error:''};
+    } catch(e){return {points:[] as Point[],error:String(e)}}
+  },[calibrated,contour,calibration,mmPerPx]);
+  const polyMm=transformed.points;
   const polyBounds=polyMm.length>=3?box(polyMm):null;
-  const traceValid=contour.length>=3 && isSimple(polyMm);
+  const traceValid=contour.length>=3 && isSimple(polyMm) && !transformed.error;
+  const validation=useMemo(()=>{
+    if(!calibration||checkPoints.length!==2)return null;
+    try{return checkIndependentDistance(calibration.pixelToMm,checkPoints[0],checkPoints[1],Number(checkDistance))}
+    catch{return null}
+  },[calibration,checkPoints,checkDistance]);
+  const extrapolation=useMemo(()=>{
+    if(!calibration||!contour.length)return 0;
+    try{return calibrationExtrapolationRatio(calibration.pixelToMm,contour,calibration.sourceCorners)}
+    catch{return Infinity}
+  },[calibration,contour]);
+  const readyForSave=calibrated&&traceValid&&(calMode==='line'||validation?.passed===true)&&extrapolation<12;
+  const correctedView=calibration&&traceValid?rectifiedContourView(contour,calibration.pixelToMm):null;
   useEffect(()=>{
     if(!image){setImageUrl('');return}
     const url=URL.createObjectURL(image);setImageUrl(url);
@@ -124,7 +175,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       });
       setDimensions({w:prepared.width,h:prepared.height});
       setImage(prepared.preview);setQuality(prepared.quality);
-      setScanRef(saved);setRefPoints([]);setContour([]);setMode('scale');
+      setScanRef(saved);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
+      setContour([]);setMode('scale');setShowCorrected(false);
     }catch(error){
       setCaptureError('Fotografija nije obrađena: '+String(error));
       throw error;
@@ -139,7 +191,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setDimensions({w:record.width,h:record.height});
       setScanRef({id:record.id,imageId:record.imageId});
       setQuality({issues:[],notes:record.qualityWarnings});
-      setRefPoints([]);setContour([]);setMode('scale');
+      setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
+      setContour([]);setMode('scale');setShowCorrected(false);
     }catch(error){setCaptureError(String(error))}
     finally{setProcessing(false)}
   }
@@ -147,25 +200,54 @@ function Scan({onSaved}:{onSaved:()=>void}){
     if(!image||!dimensions.w)return;
     const p=fromPointer(e);
     if(p.x<0||p.y<0||p.x>dimensions.w||p.y>dimensions.h)return;
-    if(mode==='scale')setRefPoints(points=>points.length<2?[...points,p]:[p]);
+    if(mode==='scale'){
+      if(calMode==='line')setRefPoints(points=>points.length<2?[...points,p]:[p]);
+      else if(calMode==='rectangle')setQuadPoints(points=>points.length<4?[...points,p]:[p]);
+    }else if(mode==='check')setCheckPoints(points=>points.length<2?[...points,p]:[p]);
     else setContour(points=>[...points,p]);
   }
+  async function findMarkers(){
+    if(!image)return;
+    setDetecting(true);setCaptureError('');
+    try{
+      const found=await detectAruco(image);
+      const filtered=found.slice().sort((a,b)=>a.hammingDistance-b.hammingDistance);
+      setMarkers(filtered);setChosenMarker(filtered[0]?.id??null);
+      if(!filtered.length)setCaptureError('Marker nije prepoznat. Provjeri štampu, osvjetljenje i potpun kadar. Možeš koristiti četiri ručne tačke.');
+    }catch(error){setCaptureError('Detekcija nije uspjela: '+String(error))}
+    finally{setDetecting(false)}
+  }
+  async function downloadMarker(){
+    try{
+      const svg=await generateMarkerSvg(Number(markerId),Number(markerSize));
+      downloadText(svg,'MEDITERA_ARUCO_MIP36h12_ID'+markerId+'_'+markerSize+'mm.svg','image/svg+xml');
+    }catch(error){setCaptureError('Marker nije generisan: '+String(error))}
+  }
+  function changeCalibration(next:'line'|'rectangle'|'marker'){
+    setCalMode(next);setRefPoints([]);setQuadPoints([]);setMarkers([]);setChosenMarker(null);
+    setContour([]);setCheckPoints([]);setMode('scale');setShowCorrected(false);setCaptureError('');
+  }
   async function save(){
-    if(!image||!traceValid||mmPerPx<=0||!Number.isFinite(mmPerPx)||Number(thickness)<=0)return;
+    if(!image||!readyForSave||Number(thickness)<=0)return;
     setBusy(true);setCaptureError('');
     try{
       const now=new Date().toISOString(),id=crypto.randomUUID(),imageId=scanRef?.imageId||crypto.randomUUID();
       await storeScan({id,label:name.trim()||'OSB ostatak '+id.slice(0,6),material:'OSB',
         thicknessMm:Number(thickness),polygonMm:polyMm,holesMm:[],defectsMm:[],
         areaMm2:area(polyMm),location:location.trim()||'Nepoznato',status:'MEASURED',
-        calibrationMethod:'two-point-manual',mmPerPx,revision:1,imageId,
+        calibrationMethod:calibration?.method||'two-point-manual',
+        mmPerPx:calibration?null:mmPerPx,calibration:calibration?{
+          ...calibration,
+          independentCheck:validation?{...validation,expectedMm:Number(checkDistance)}:undefined
+        }:undefined,
+        revision:1,imageId,
         scanId:scanRef?.id,createdAt:now,updatedAt:now},scanRef?undefined:image);
       onSaved();
     }catch(e){setCaptureError('Nije sačuvano: '+String(e))}
     finally{setBusy(false)}
   }
   return <>
-    <Header title="Skeniranje" subtitle="Fotografija → referentna dužina → kontura → lokalni inventar."/>
+    <Header title="Skeniranje" subtitle="Fotografija → kalibracija mjerila/perspektive → kontrola → kontura u milimetrima."/>
     <div className="scan-layout">
       <div className="panel canvas-panel">
         <div className="canvas-top"><h2>Fotografija ostatka</h2><span className="tag">Samo lokalni podaci</span></div>
@@ -173,22 +255,44 @@ function Scan({onSaved}:{onSaved:()=>void}){
         {imageUrl?<div className="image-editor">
           <div className="editor-toolbar"><div className="tabs">
             <button className={mode==='scale'?'tab active':'tab'} onClick={()=>setMode('scale')}><Ruler size={15}/> 1. Mjerilo</button>
-            <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!(mmPerPx>0)}> <Focus size={15}/> 2. Kontura</button>
+            <button className={mode==='check'?'tab active':'tab'} onClick={()=>setMode('check')} disabled={!calibration}><CheckCircle2 size={15}/> 2. Kontrola</button>
+            <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!calibrated}><Focus size={15}/> 3. Kontura</button>
           </div><div className="toolbar-right">
-            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?setRefPoints(p=>p.slice(0,-1)):setContour(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
-            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setRefPoints([]);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
+            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):setContour(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
+            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
             <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint}>
               <image href={imageUrl} width={dimensions.w} height={dimensions.h} preserveAspectRatio="none" pointerEvents="none"/>
-              {mode==='scale'&&refPoints.length===2&&<line x1={refPoints[0].x} y1={refPoints[0].y} x2={refPoints[1].x} y2={refPoints[1].y} stroke="#ffdb84" strokeWidth={Math.max(3,dimensions.w/180)} strokeDasharray="10 8" pointerEvents="none"/>}
+              {mode==='scale'&&calMode==='line'&&refPoints.length===2&&<line x1={refPoints[0].x} y1={refPoints[0].y} x2={refPoints[1].x} y2={refPoints[1].y} stroke="#ffdb84" strokeWidth={Math.max(3,dimensions.w/180)} strokeDasharray="10 8" pointerEvents="none"/>}
+              {calMode==='rectangle'&&quadPoints.length>1&&
+                <polyline points={coords(quadPoints)} fill="none" stroke="#ffda78" strokeWidth={Math.max(3,dimensions.w/220)} pointerEvents="none"/>}
+              {calMode==='marker'&&selectedMarker&&
+                <polygon points={coords(selectedMarker.corners)} fill="none" stroke="#ffdd8a" strokeWidth={Math.max(3,dimensions.w/200)} pointerEvents="none"/>}
+              {mode==='check'&&checkPoints.length===2&&
+                <line x1={checkPoints[0].x} y1={checkPoints[0].y} x2={checkPoints[1].x} y2={checkPoints[1].y} stroke="#69e7fc"
+                  strokeWidth={Math.max(3,dimensions.w/180)} pointerEvents="none"/>}
               {contour.length>1&&<polyline points={coords(contour)} fill="none" stroke="#dfff9e" strokeWidth={Math.max(3,dimensions.w/200)} pointerEvents="none"/>}
               {contour.length>=3&&<polygon points={coords(contour)} fill="#b9e398" fillOpacity=".18" stroke="#dbffb1" strokeWidth={Math.max(2,dimensions.w/240)} pointerEvents="none"/>}
-              {(mode==='scale'?refPoints:contour).map((p,i)=><circle key={i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/110)} fill="#ffce6e" stroke="#182925" strokeWidth={Math.max(2,dimensions.w/500)} pointerEvents="none"/>)}
+              {(mode==='scale'?(calMode==='line'?refPoints:calMode==='rectangle'?quadPoints:selectedMarker?.corners||[]):mode==='check'?checkPoints:contour).map((p,i)=><circle key={i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/110)} fill="#ffce6e" stroke="#182925" strokeWidth={Math.max(2,dimensions.w/500)} pointerEvents="none"/>)}
             </svg>
           </div>
           <div className="editor-hint">{mode==='scale'?
-            'Dodirni dvije tačke na referentnoj dužini poznate veličine.': 'Dodiruj uglove redom duž oboda ostatka. Za zatvaranje konture automatski se spaja prva i posljednja tačka.'}</div>
+            calMode==='line'?'Dodirni dvije tačke na referentnoj dužini poznate veličine.':
+            calMode==='rectangle'?'Klikni 4 ugla pravougaone reference redom: gore lijevo → gore desno → dolje desno → dolje lijevo.':
+            'Pronađi marker dugmetom u panelu i izaberi prepoznati ID.':
+            mode==='check'?'Dodirni dvije kontrolne tačke sa poznatom nezavisnom dužinom na površini OSB-a.':
+            'Dodiruj uglove redom duž oboda ostatka. Kontura se zatvara automatski.'}</div>
+          {showCorrected&&correctedView&&correctedView.poly.length>=3&&
+            <div className="rectified-preview" aria-label="Ispravljena vektorska kontura u mm">
+              <h3>Perspektivno ispravljena vektorska kontura</h3>
+              <svg viewBox={`-12 -12 ${Math.max(1,correctedView.widthMm)+24} ${Math.max(1,correctedView.heightMm)+24}`} role="img" aria-label="Kontura transformisana u milimetre">
+                <polygon points={coords(correctedView.poly)} fill="#bcdcc5" stroke="#285b40" strokeWidth={Math.max(1,correctedView.widthMm/350)}/>
+              </svg>
+              <small>{Math.round(correctedView.widthMm)} × {Math.round(correctedView.heightMm)} mm. Ispravljena je geometrija; fotografija nije optički odizobličena.</small>
+            </div>}
+          {calibration&&traceValid&&<button className="secondary rectified-toggle" onClick={()=>setShowCorrected(v=>!v)}>
+            {showCorrected?'Sakrij':'Prikaži'} ispravljenu 2D konturu</button>}
         </div>:null}
         {processing&&<div className="scan-progress" role="status">Dekodiranje, provjera kvaliteta i lokalno čuvanje fotografije...</div>}
         {!imageUrl&&capturedScans.length>0&&<section className="recovery-list">
@@ -208,11 +312,57 @@ function Scan({onSaved}:{onSaved:()=>void}){
         </div>}
       </div>
       <aside className="panel properties-panel">
-        <h2>Parametri skeniranja</h2><p className="muted">Ručna metoda · bez perspektivne korekcije</p>
-        <div className="form-block"><FormLabel>Poznato rastojanje dvije tačke (mm)</FormLabel>
+        <h2>Parametri skeniranja</h2><p className="muted">Faza 2 · kalibracija u ravni, bez korekcije optičkog izobličenja objektiva</p>
+        <div className="form-block"><FormLabel>Metoda kalibracije</FormLabel>
+          <select aria-label="Metoda kalibracije" value={calMode} onChange={e=>changeCalibration(e.target.value as 'line'|'rectangle'|'marker')}>
+            <option value="line">Dvije tačke · bez perspektive</option>
+            <option value="rectangle">4 ugla · pravougaona referenca</option>
+            <option value="marker">ArUco · automatsko prepoznavanje</option>
+          </select>
+        </div>
+        {calMode==='line'&&<div className="form-block"><FormLabel>Poznato rastojanje dvije tačke (mm)</FormLabel>
           <input type="number" min="0.001" step="any" value={knownDistance} onChange={e=>setKnownDistance(e.target.value)}/>
           <p className="small-help">{refPoints.length}/2 tačke · {mmPerPx>0?'1 px = '+mmPerPx.toFixed(3)+' mm':'Odredi dvije tačke na fotografiji'}</p>
-        </div>
+        </div>}
+        {calMode==='rectangle'&&<div className="calibration-settings">
+          <div className="form-grid">
+            <div className="form-block"><FormLabel>Širina reference (mm)</FormLabel>
+              <input aria-label="Širina reference" type="number" min="1" value={cardWidth} onChange={e=>setCardWidth(e.target.value)}/></div>
+            <div className="form-block"><FormLabel>Visina reference (mm)</FormLabel>
+              <input aria-label="Visina reference" type="number" min="1" value={cardHeight} onChange={e=>setCardHeight(e.target.value)}/></div>
+          </div>
+          <p className="small-help">{quadPoints.length}/4 ugla · dimenzije 210×297 mm su samo početna A4 pretpostavka; izmjeri stvarnu referencu.</p>
+        </div>}
+        {calMode==='marker'&&<div className="calibration-settings">
+          <div className="form-grid">
+            <div className="form-block"><FormLabel>Strana crnog kvadrata (mm)</FormLabel>
+              <input aria-label="Strana markera" type="number" min="20" max="400" step="any"
+                value={markerSize} onChange={e=>setMarkerSize(e.target.value)}/></div>
+            <div className="form-block"><FormLabel>ID za štampanje</FormLabel>
+              <input aria-label="ID markera" type="number" min="0" max="249" step="1" value={markerId} onChange={e=>setMarkerId(e.target.value)}/></div>
+          </div>
+          <button className="secondary full" onClick={()=>void downloadMarker()}>Preuzmi SVG ArUco marker za štampu</button>
+          <button className="primary full" disabled={!image||detecting} onClick={()=>void findMarkers()}>
+            {detecting?'Tražim markere...':'Pronađi ArUco na fotografiji'}
+          </button>
+          {markers.length>0&&<div className="form-block"><FormLabel>Prepoznati markeri</FormLabel>
+            <select aria-label="Prepoznati markeri" value={chosenMarker??''} onChange={e=>{setChosenMarker(Number(e.target.value));setContour([]);setCheckPoints([]);}}>
+              {markers.map((m,i)=><option key={i} value={m.id}>ID {m.id} · Hamming {m.hammingDistance}</option>)}
+            </select>
+          </div>}
+          <p className="small-help">Rječnik ARUCO_MIP_36h12. Štampaj 100% (bez „fit to page”), izmjeri stvarnu stranicu crnog kvadrata, postavi marker u ravni OSB-a.</p>
+        </div>}
+        {calibrationState.error&&<p className="error-text">{calibrationState.error}</p>}
+        {calibration?.qualityWarnings.map((msg,i)=><p key={i} className="small-help">⚠ {msg}</p>)}
+        {calMode!=='line'&&<div className="form-block verification-block">
+          <FormLabel>Nezavisna kontrolna dužina (mm)</FormLabel>
+          <input type="number" aria-label="Kontrolna dužina" min="0.001" step="any" value={checkDistance} onChange={e=>setCheckDistance(e.target.value)}/>
+          <p className="small-help">Klikni „2. Kontrola”, pa dvije tačke na fotografiji. Bez uspješne kontrole zapis se neće sačuvati.</p>
+          {validation&&<p role="status" className={validation.passed?'verify-pass':'verify-fail'}>
+            {validation.passed?'Kontrola: u granici':'Kontrola: odstupanje'} · {validation.measuredMm.toFixed(1)} mm · Δ {validation.errorMm.toFixed(1)} mm.
+            {validation.passed?'':' Ispravi referencu ili ponovi fotografiju.'}
+          </p>}
+        </div>}
         <div className="divider-line"/>
         <div className="form-block"><FormLabel>Naziv ostatka</FormLabel><input placeholder="npr. OSB L-12" value={name} onChange={e=>setName(e.target.value)}/></div>
         <div className="form-grid"><div className="form-block"><FormLabel>Debljina (mm)</FormLabel><input type="number" min="1" step="any" value={thickness} onChange={e=>setThickness(e.target.value)}/></div>
@@ -222,11 +372,14 @@ function Scan({onSaved}:{onSaved:()=>void}){
           <div><span>Površina</span><strong>{traceValid?formatArea(area(polyMm)):'—'} <small>m²</small></strong></div>
           <div><span>Dimenzije obuhvata</span><strong>{polyBounds?Math.round(polyBounds.maxX)+' × '+Math.round(polyBounds.maxY):'—'} <small>mm</small></strong></div>
         </div>
-        {!traceValid&&contour.length>=3&&<p className="error-text">Kontura je neispravna ili se presijeca. Poništi posljednje tačke.</p>}
-        <button className="primary full" disabled={!image||!traceValid||!Number.isFinite(mmPerPx)||mmPerPx<=0||busy||Number(thickness)<=0} onClick={()=>void save()}>
+        {!traceValid&&contour.length>=3&&<p className="error-text">Kontura je neispravna ili se presijeca. {transformed.error||'Poništi posljednje tačke.'}</p>}
+        {extrapolation>=4&&<p className="error-text">Kontura je {extrapolation.toFixed(1)}× dalje od centra nego referentni poluprečnik. Greška jedne reference raste pri ekstrapolaciji; potvrdi dimenzije.</p>}
+        {extrapolation>=12&&<p className="error-text">Prevelika ekstrapolacija (>12×). Premjesti ili uvećaj referencu.</p>}
+        <button className="primary full" disabled={!image||!readyForSave||busy||Number(thickness)<=0} onClick={()=>void save()}>
           {busy?'Čuvanje...':<><Save size={17}/> Sačuvaj izmjereni ostatak</>}</button>
         {captureError&&<p role="alert" className="error-text">{captureError}</p>}
-        <div className="safety-note"><ShieldAlert size={17}/><p>Ručne dvije tačke ne ispravljaju perspektivu. Ostatak se čuva kao <strong>IZMJEREN</strong>, nikada automatski kao verifikovan za CNC.</p></div>
+        <div className="safety-note"><ShieldAlert size={17}/><p>Projektivna kalibracija pretpostavlja da su referenca i OSB obod <strong>u istoj ravni</strong>.
+          Nema korekcije distorzije objektiva niti garancije tačnosti. Zapis je samo <strong>IZMJEREN</strong> — nikada automatski CNC verifikovan.</p></div>
       </aside>
     </div>
   </>;

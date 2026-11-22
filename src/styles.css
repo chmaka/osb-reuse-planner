@@ -180,3 +180,18 @@ p{line-height:1.6}
 .recovery-row span{font-size:11px;color:#7a8c7b}
 .recovery-row strong{font-size:11px;color:#375f3f}
 @media(max-width:530px){.camera-control-row{align-items:stretch}.camera-select{width:100%}.camera-select select{width:100%}.recovery-row{flex-wrap:wrap}}
+
+/* Phase 2 projective calibration and 2D corrected geometry */
+.calibration-settings{display:grid;gap:11px;margin:9px 0 18px}
+.calibration-settings .full{justify-content:center}
+.verification-block{margin:14px 0;padding:12px;border:1px solid #dfe9de;border-radius:9px;background:#f8fbf5}
+.verify-pass,.verify-fail{padding:10px;border-radius:8px;font-size:12px;font-weight:650;margin:8px 0 0}
+.verify-pass{background:#e4f3e5;color:#255d37}
+.verify-fail{background:#fdeade;color:#994c1e}
+.rectified-preview{padding:16px;background:#f2f7f1;border-top:1px solid #d8e6d8}
+.rectified-preview h3{margin-bottom:10px}
+.rectified-preview svg{width:100%;height:auto;max-height:280px;border:1px dashed #c4d0c4;border-radius:8px;background:#fff}
+.rectified-preview small{display:block;color:#607e65;font-size:11px;margin-top:8px}
+.rectified-toggle{margin:8px 14px 16px;max-width:calc(100% - 28px)}
+.editor-toolbar .tabs{flex-wrap:wrap;gap:3px}
+@media(max-width:530px){.editor-toolbar{flex-wrap:wrap}.editor-toolbar .tabs{width:100%}.editor-toolbar .tabs .tab{flex:1;min-width:78px;font-size:11px;padding:8px 5px}}

@@ -9,3 +9,8 @@ Physical acceptance still pending: 20 real 18mm OSB scraps, separate validation 
 - Playwright permission-denied fallback and file import; verify CAPTURED record survives reload and image bytes remain available.
 - Test canvas frame and camera-switch control using stubs only where deterministic. These are NOT evidence of real Android hardware support.
 - Workshop QA backlog: capture on real Android Chrome and a desktop USB webcam; verify ImageCapture fallback, device switching, real HEIC from phone, EXIF rotated photos, low-light/reflective samples and slow/offline devices.
+
+## Phase 2 software acceptance
+- Synthetic homography unit tests: mapping tilted reference quad into metric rectangle, reverse transform, singular/invalid guard, planted distance mismatch, marker extrapolation.
+- Browser E2E: choose manual four-point reference, independent distance acceptance and rejection, contour and saved metadata, IndexedDB replay. Generate printed-size MIP36h12 SVG; upload composited synthetic marker and inspect auto detector when supported.
+- Real workshop calibration acceptance **pending**: at least 20 real irregular OSB offcuts; gauge known dimensions at several locations, including edges distant from a marker; repeat under lighting/camera changes; log RMS, mean and 95th percentile in mm; preserve each test image and reference lengths. No release-to-CNC based on software unit tests.

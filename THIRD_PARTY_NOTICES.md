@@ -16,3 +16,10 @@ Project code: original Meditera OSB Reuse Lab source, available in this reposito
 ## Other application dependencies
 
 React, Vite, TypeScript, Dexie, Lucide, Vitest, Playwright, and their transitive dependencies retain their separate upstream licenses. Before redistributing a packaged build, run a full dependency license inventory and include relevant notices. This file is not itself a complete automated transitive-license audit.
+
+## ArUco detection
+
+- Package: **js-aruco2**, version 2.0.0, https://github.com/damianofalcioni/js-aruco2
+- The original source includes MIT-style notices by Damiano Falcioni and Juan Mellado and additional BSD/OpenCV and dictionary notices.
+- Exact full upstream license/third-party texts: https://github.com/damianofalcioni/js-aruco2/blob/master/LICENSE.txt. These notices must accompany source/binary redistribution. The application does not claim all sublicensed components are pure MIT.
+- Detection runs locally and lazily in a Web Worker. The app generates printed-size SVG marker artwork from the included dictionary.

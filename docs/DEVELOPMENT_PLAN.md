@@ -18,3 +18,11 @@ Do not advance phase status until acceptance tests and human evidence exist.
 - Worker-based advisory diagnostics for blur, high glare, low contrast, possible near-frame-edge details. Thresholds are heuristic and **not calibrated confidence values**.
 - Captures are immediately persisted (Dexie schema v2) and can be resumed even before a polygon is drawn.
 - Phase 1 browser automated tests are distinct from real-device acceptance. Android and USB-camera physical testing remains pending until a real workshop device is used.
+
+### Phase 2 implementation — projective calibration
+- Real four-corner rectangle projective calibration with a numerically conditioned homography and pixel-to-mm vector geometry; arbitrary quadrilateral is validated (convexity, edge length, finite coordinates).
+- Optional ArUco marker detection uses `js-aruco2` MIT/BSD components in an on-demand local Web Worker, dictionary `ARUCO_MIP_36h12`, strict Hamming <=2, thumbnail processing for mobile performance.
+- Printable physical-size SVG markers: default 80 mm **black square**, quiet zone outside; user must print 100%, measure with ruler, and keep marker flat and coplanar with OSB top face.
+- Measured contour can be previewed in corrected metric 2D without raster warping; independent physical-distance check is required for projective calibration (max(2 mm, 2%) software acceptance threshold, not demonstrated physical accuracy). Extrapolation hard guard 12× reference radius.
+- Remnant calibration and independent check kept in IndexedDB with audit records; marked MEASURED, never promoted to CNC VERIFIED from software alone.
+- Optical lens distortion, subpixel corner refinement, homography conditioned with multi-marker board, true rectified photograph, validation on real scrap material remain future work. 

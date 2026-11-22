@@ -38,3 +38,7 @@ Repository created for Meditera, 2026-11-22.
 The browser image is oriented by the decoder before tracing; source EXIF and original image remain unmodified. Pixel data for the editor is always normalized. Automatic quality indicators are heuristic (blur, glare, contrast and frame risk); they are not accuracy scores. Photo capture and locally saved recovery records work even when calibration is deferred.
 
 `heic-to` (LGPL-3.0-or-later) is dynamically imported only for unsupported HEIC images. Keep its notices and source availability when redistributing; see `docs/DEPENDENCY_REVIEW.md`. Hardware acceptance requires actual Android phone and desktop USB webcam; Playwright tests cannot substitute.
+
+### Phase 2 planar projective calibration (pilot)
+
+Skeniranje now offers: (1) original two-point approximate scale (no projective correction); (2) manual rectangle/coplanar planar homography by tapping 4 corners in clockwise order; (3) `ARUCO_MIP_36h12` marker detection (printable SVG). Enter exact reference width/height or physically measured black-square marker edge. Projective methods **require an independent physical check length** within max(2 mm, 2%) before a record can be stored as MEASURED. These are software thresholds, **not established camera precision**. Projective calibration stores its full pixel-to-mm matrix and the check result. A corrected 2D polygon preview can be toggled on; no full-image raster rectification or optical distortion correction is offered. CNC remains blocked pending real workshop testing.

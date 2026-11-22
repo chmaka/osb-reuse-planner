@@ -46,6 +46,6 @@ export async function storeScan(remnant: Remnant, image?: Blob): Promise<void> {
       if(!updated)throw Error('Nije pronađen izvorni zapis skeniranja.');
     }
     await db.audit.add({id:crypto.randomUUID(),at:new Date().toISOString(),
-      action:'SCAN_MEASURED',entityId:remnant.id,detail:'Manual two-point scale; awaiting verification'});
+      action:'SCAN_MEASURED',entityId:remnant.id,detail:remnant.calibrationMethod+'; calibration metadata preserved; awaiting physical verification'});
   });
 }

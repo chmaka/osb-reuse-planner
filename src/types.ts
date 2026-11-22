@@ -14,8 +14,16 @@ export interface Remnant {
   status: RemnantStatus;
   imageId?: string;
   scanId?: string;
-  calibrationMethod: 'two-point-manual';
-  mmPerPx: number;
+  calibrationMethod: 'two-point-manual'|'manual-rectangle'|'aruco-single';
+  mmPerPx: number|null;
+  calibration?: {
+    method:'manual-rectangle'|'aruco-single';
+    sourceCorners: [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
+    widthMm:number; heightMm:number;
+    pixelToMm:[number,number,number,number,number,number,number,number,number];
+    markerId?:number; dictionary?:string; qualityWarnings:string[];
+    independentCheck?:{measuredMm:number;errorMm:number;relativeError:number;passed:boolean;expectedMm:number};
+  };
   revision: number;
   createdAt: string;
   updatedAt: string;

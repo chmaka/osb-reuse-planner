@@ -66,3 +66,33 @@ test('marker generator downloads printable SVG while preserving manual fallback'
  await page.getByLabel('Metoda kalibracije').selectOption('line');
  await expect(page.getByText('Poznato rastojanje dvije tačke (mm)')).toBeVisible();
 });
+
+
+test('locally generated printed marker is detected from a synthetic photographed scene in worker',async({page})=>{
+ await page.goto('/');
+ await page.getByRole('button',{name:'Skeniranje'}).first().click();
+ const encoded=await page.evaluate(async()=>{
+   const {generateMarkerSvg}=await import('/src/features/calibration/aruco.ts');
+   const content=await generateMarkerSvg(4,80);
+   const url=URL.createObjectURL(new Blob([content],{type:'image/svg+xml'}));
+   try{
+     const img=new Image();img.src=url;await img.decode();
+     const canvas=document.createElement('canvas');canvas.width=800;canvas.height=600;
+     const ctx=canvas.getContext('2d')!;
+     ctx.fillStyle='#e4e1dc';ctx.fillRect(0,0,800,600);
+     ctx.fillStyle='#a28867';ctx.fillRect(110,90,600,410);
+     // Printed marker must lie on same plane as object; add a full quiet zone.
+     ctx.fillStyle='white';ctx.fillRect(345,135,270,270);
+     ctx.drawImage(img,355,145,250,250);
+     return canvas.toDataURL('image/png').split(',')[1];
+   }finally{URL.revokeObjectURL(url)}
+ });
+ await page.locator('input[type=file]').setInputFiles({
+   name:'aruco-generated-scene.png',mimeType:'image/png',buffer:Buffer.from(encoded,'base64')
+ });
+ await page.getByLabel('Metoda kalibracije').selectOption('marker');
+ await page.getByRole('button',{name:'Pronađi ArUco na fotografiji'}).click();
+ await expect(page.getByText('Prepoznati markeri')).toBeVisible({timeout:15000});
+ await expect(page.getByLabel('Prepoznati markeri')).toHaveValue('4');
+ await expect(page.getByRole('button',{name:/3\. Kontura/})).toBeEnabled();
+});

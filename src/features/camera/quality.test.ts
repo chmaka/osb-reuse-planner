@@ -15,7 +15,7 @@ describe('advisory capture diagnostics',()=>{
     expect(q.issues).toContain('GLARE');
   });
   it('flags a high-contrast object crossing the frame',()=>{
-    const q=analyzePixels(image(96,96,(x,y)=>(x%2===0||y%2===0)?250:15),96,96);
+    const q=analyzePixels(image(96,96,(x,y)=>(x%8<4||y%8<4)?250:15),96,96);
     expect(q.issues).toContain('FRAME_RISK');
   });
   it('guards invalid buffers without inventing a score',()=>{

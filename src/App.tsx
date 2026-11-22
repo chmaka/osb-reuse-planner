@@ -374,7 +374,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
         </div>
         {!traceValid&&contour.length>=3&&<p className="error-text">Kontura je neispravna ili se presijeca. {transformed.error||'Poništi posljednje tačke.'}</p>}
         {extrapolation>=4&&<p className="error-text">Kontura je {extrapolation.toFixed(1)}× dalje od centra nego referentni poluprečnik. Greška jedne reference raste pri ekstrapolaciji; potvrdi dimenzije.</p>}
-        {extrapolation>=12&&<p className="error-text">Prevelika ekstrapolacija (>12×). Premjesti ili uvećaj referencu.</p>}
+        {extrapolation>=12&&<p className="error-text">Prevelika ekstrapolacija (više od 12×). Premjesti ili uvećaj referencu.</p>}
         <button className="primary full" disabled={!image||!readyForSave||busy||Number(thickness)<=0} onClick={()=>void save()}>
           {busy?'Čuvanje...':<><Save size={17}/> Sačuvaj izmjereni ostatak</>}</button>
         {captureError&&<p role="alert" className="error-text">{captureError}</p>}

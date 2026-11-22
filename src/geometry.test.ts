@@ -13,6 +13,12 @@ describe('geometry and conservative layout',()=>{
     const triangle=[{x:20,y:80},{x:80,y:20},{x:20,y:20}];
     expect(contained(triangle,L,[],0)).toBe(false);
   });
+  it('rejects concave notch crossed near an endpoint even when edge midpoint is inside',()=>{
+    const stock=[{x:0,y:0},{x:100,y:0},{x:100,y:100},{x:0,y:100},
+      {x:0,y:12},{x:80,y:12},{x:80,y:10},{x:0,y:10}];
+    const triangle=[{x:5,y:5},{x:95,y:50},{x:95,y:5}];
+    expect(contained(triangle,stock,[],0)).toBe(false);
+  });
   it('rejects self intersection',()=>expect(isSimple([{x:0,y:0},{x:2,y:2},{x:0,y:2},{x:2,y:0}])).toBe(false));
   it('detects boundary as included',()=>expect(pointInPolygon({x:0,y:10},L)).toBe(true));
   it('does not allow part to overlap a hole',()=>{

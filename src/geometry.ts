@@ -35,6 +35,11 @@ export function pointInPolygon(p: Point, ring: Polygon, inclusive = true): boole
   }
   return inside;
 }
+export function segmentsProperIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
+  const x1 = cross(a,b,c), x2 = cross(a,b,d), y1 = cross(c,d,a), y2 = cross(c,d,b);
+  return ((x1 > EPS && x2 < -EPS) || (x1 < -EPS && x2 > EPS)) &&
+    ((y1 > EPS && y2 < -EPS) || (y1 < -EPS && y2 > EPS));
+}
 export function edges(ring: Polygon): [Point, Point][] {
   return ring.map((p, i) => [p, ring[(i + 1) % ring.length]]);
 }
@@ -82,7 +87,8 @@ export function contained(part: Polygon, stock: Polygon, exclusions: Polygon[], 
   if(edges(part).some(([a,b]) => {
     const m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
     return !pointInPolygon(m,stock,true) ||
-      edges(stock).some(([c,d])=>segmentDistance(a,b,c,d)<clearanceMm-EPS);
+      edges(stock).some(([c,d])=>segmentsProperIntersect(a,b,c,d) ||
+        (clearanceMm>0 && segmentDistance(a,b,c,d)<clearanceMm-EPS));
   })) return false;
   for(const cut of exclusions){
     if(!isSimple(cut)) return false;

@@ -13,7 +13,6 @@ export interface ProjectiveCalibration {
   dictionary?:string;
   qualityWarnings:string[];
 }
-const dot=(a:Point,b:Point)=>a.x*b.x+a.y*b.y;
 const subtract=(a:Point,b:Point):Point=>({x:a.x-b.x,y:a.y-b.y});
 const norm=(p:Point)=>Math.hypot(p.x,p.y);
 function matmul(a:Matrix3,b:Matrix3):Matrix3{

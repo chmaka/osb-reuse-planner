@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Download, Layers, PackageCheck, Ruler, ShieldAlert } from 'lucide-react';
 import type { Remnant } from '../../types';
@@ -9,7 +10,7 @@ function readableArea(mm2: number): string {
   return (mm2 / 1_000_000).toLocaleString('sr-RS', { maximumFractionDigits: 3 });
 }
 function LocalMetric({ title, value, unit, icon }: {
-  title: string; value: string; unit?: string; icon: React.ReactNode
+  title: string; value: string; unit?: string; icon: ReactNode
 }) {
   return <div className="inventory-insight-metric">
     <div className="inventory-insight-metric-head">{icon}<span>{title}</span></div>

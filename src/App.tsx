@@ -77,9 +77,9 @@ function Dashboard({remnants,onNavigate}:{remnants:Remnant[];onNavigate:(p:Page)
       <Metric title="Za fizičku provjeru" value={String(remnants.filter(r=>r.status==='MEASURED').length)} Icon={Ruler}/>
     </div>
     <section className="dashboard-grid">
-      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 3</div>
+      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 4</div>
         <h2>Od fotografije do digitalne konture.</h2>
-        <p>Fotografiši OSB ostatak, odredi mjerilo ili ArUco marker, zatim predloži konturu automatski ili je iscrtaj i ispravi ručno. Provjeri otvore i oštećenja; sve ostaje lokalno.</p>
+        <p>Fotografiši OSB ostatak sa ArUco markerom. Aplikacija automatski predlaže obod, dimenzije i površinu u milimetrima. Kontrolu obavlja operater.</p>
         <button className="light-button" onClick={()=>onNavigate('scan')}>Pokreni skeniranje <ArrowRight size={17}/></button>
         <div className="hero-figure"><div className="fragment f-one"/><div className="fragment f-two"/><div className="fragment f-three"/></div>
       </div>
@@ -487,7 +487,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     finally{setBusy(false)}
   }
   return <>
-    <Header title="Skeniranje" subtitle="Fotografija → kalibracija → automatska ili ručna kontura → otvori i oštećenja → inventar."/>
+    <Header title="Skeniranje" subtitle="Fotografija → automatski ArUco i oblik → dimenzije u milimetrima → kontrola → inventar."/>
     <div className="scan-layout">
       <div className="panel canvas-panel">
         <div className="canvas-top"><h2>Fotografija ostatka</h2><span className="tag">Samo lokalni podaci</span></div>
@@ -573,7 +573,35 @@ function Scan({onSaved}:{onSaved:()=>void}){
         </div>}
       </div>
       <aside className="panel properties-panel">
-        <h2>Parametri skeniranja</h2><p className="muted">Faza 2 · kalibracija u ravni, bez korekcije optičkog izobličenja objektiva</p>
+        <h2>Parametri skeniranja</h2><p className="muted">Automatski ArUco + 2D oblik + dimenzije u mm</p>
+        <section className="auto-scan-panel" aria-label="Automatski Re:bble skener">
+          <h3>Automatski prepoznaj oblik i mjere</h3>
+          <label className="review-check"><input type="checkbox" checked={autoOnUpload} onChange={e=>setAutoOnUpload(e.target.checked)}/>
+            Auto-skeniranje odmah poslije fotografisanja</label>
+          <div className="form-block"><FormLabel>Način prepoznavanja oblika</FormLabel>
+            <select aria-label="Način prepoznavanja oblika" value={scanEngine}
+              onChange={e=>setScanEngine(e.target.value as 'fast'|'sam')}>
+              <option value="fast">Brzo · ArUco + kontrast</option>
+              <option value="sam">AI · ArUco + SlimSAM (WebGPU)</option>
+            </select>
+          </div>
+          <div className="form-block"><FormLabel>Izmjerena veličina crnog kvadrata (mm)</FormLabel>
+            <input aria-label="Stvarna veličina markera" type="number" min="20" max="400" step="any"
+              value={markerSize} onChange={e=>setMarkerSize(e.target.value)}/>
+          </div>
+          <button className="primary full" disabled={!image||segmenting||processing}
+            onClick={()=>image&&void autoScanImage(image,scanEngine,Number(markerSize))}>
+            {segmenting?'Prepoznajem...':'Automatski prepoznaj oblik i mjere'}</button>
+          {autoProgress&&<p role="status" className="auto-progress">{autoProgress}</p>}
+          {autoReport&&<div className="auto-measurements" aria-label="Automatski izmjerene dimenzije">
+            <strong>ArUco ID {autoReport.marker} · automatsko mjerenje</strong>
+            <div><span>Širina obuhvata</span><strong>{autoReport.widthMm.toFixed(1)} mm</strong></div>
+            <div><span>Visina obuhvata</span><strong>{autoReport.heightMm.toFixed(1)} mm</strong></div>
+            <div><span>Spoljna površina</span><strong>{(autoReport.areaMm2/1_000_000).toFixed(3)} m²</strong></div>
+            <small>Metod: {autoReport.method}. Samo pilot mjerenje; kontrola je neophodna prije čuvanja.</small>
+          </div>}
+          <p className="small-help">Odštampaj ArUco marker koji generiše aplikacija na 100% i fizički izmjeri crni kvadrat. Koristi se ARUCO_MIP_36h12, ne Re:bble 4×4/5×5/6×6 marker. Marker i obod moraju biti u istoj ravni. AI preuzima model samo prvi put, fotografija ostaje lokalna.</p>
+        </section>
         <div className="form-block"><FormLabel>Metoda kalibracije</FormLabel>
           <select aria-label="Metoda kalibracije" value={calMode} onChange={e=>changeCalibration(e.target.value as 'line'|'rectangle'|'marker')}>
             <option value="line">Dvije tačke · bez perspektive</option>
@@ -626,7 +654,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
         </div>}
         <div className="divider-line"/>
         <section className="segmentation-panel" aria-label="Automatska kontura i uređivanje">
-          <h2>Automatska kontura · Faza 3</h2>
+          <h2>Ručna korekcija i lokalna segmentacija</h2>
           <p className="small-help">Lokalni algoritam izdvaja materijal od kontrastne podloge. Rezultat je predlog koji moraš pregledati.</p>
           <div className="form-block">
             <FormLabel>Prag boje pozadine (10–200)</FormLabel>
@@ -831,7 +859,7 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 3 · PILOT</span></div>
+        <span className="version-pill">FAZA 4 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}

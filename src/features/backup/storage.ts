@@ -4,7 +4,7 @@ import {BACKUP_FORMAT,MAX_ARCHIVE_BYTES,TABLE_NAMES,backupCounts,buildArchive,ch
 import type {Snapshot,TableName} from './archive';
 
 async function getSnapshot():Promise<Snapshot>{
- return db.transaction('r',db.remnants,db.scans,db.parts,db.validation,db.edgeChecks,db.audit,db.images,
+ return db.transaction('r',[db.remnants,db.scans,db.parts,db.validation,db.edgeChecks,db.audit,db.images],
   async()=>{
    const [remnants,scans,parts,validation,edgeChecks,audit,images]=await Promise.all([
     db.remnants.toArray(),db.scans.toArray(),db.parts.toArray(),db.validation.toArray(),
@@ -14,14 +14,11 @@ async function getSnapshot():Promise<Snapshot>{
   });
 }
 export async function createFullBackup(){
- const archive=await buildArchive(await getSnapshot());
+ const snapshot=await getSnapshot();
+ const archive=await buildArchive(snapshot);
  const json=JSON.stringify(archive);
  return {name:'meditera-osb-backup-'+new Date().toISOString().slice(0,10)+'.json',
-   blob:new Blob([json],{type:'application/json'}),counts:backupCounts(await readCounts())};
-}
-async function readCounts():Promise<Snapshot>{
- // Kept for accurate post-export UI feedback without retaining a copy of photo blobs.
- return getSnapshot();
+   blob:new Blob([json],{type:'application/json'}),counts:backupCounts(snapshot)};
 }
 export interface RestorePlan {
  filename:string;sourceDate:string;manifestSha256:string;
@@ -87,7 +84,7 @@ export async function applyRestore(file:File,approvedManifestSha256:string){
  const {plan,missingItems}=await inspect(snapshot,file.name,archive.exportedAt,archive.manifestSha256);
  if(plan.conflicts.length)throw Error('Pronađeni su postojeći zapisi sa istim ID-em i drugim podacima; uvoz je otkazan.');
  const payload=missingItems as Snapshot;
- await db.transaction('rw',db.remnants,db.scans,db.parts,db.validation,db.edgeChecks,db.audit,db.images,async()=>{
+ await db.transaction('rw',[db.remnants,db.scans,db.parts,db.validation,db.edgeChecks,db.audit,db.images],async()=>{
   for(const r of payload.images)await db.images.add(r);
   for(const r of payload.remnants)await db.remnants.add(r);
   for(const r of payload.scans)await db.scans.add(r);

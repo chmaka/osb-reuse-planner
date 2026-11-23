@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
@@ -8,7 +8,7 @@ import {
   ShieldAlert, Trash2, WifiOff
 } from 'lucide-react';
 import { db, storeCapturedPhoto, storeScan } from './db';
-import { area, box, isSimple, normalized } from './geometry';
+import { area, box, isSimple, normalized, contained, minEdgeDistance, polygonsOverlap } from './geometry';
 import { referenceDxf, downloadText } from './dxf';
 import type { NestingResult, Point, Remnant, ScanRecord } from './types';
 import CapturePanel, { type PhotoSource } from './features/camera/CapturePanel';
@@ -16,8 +16,10 @@ import { preparePhoto } from './features/camera/photo';
 import type { PhotoQuality } from './features/camera/quality';
 import { detectAruco, generateMarkerSvg } from './features/calibration/aruco';
 import type { DetectedMarker } from './features/calibration/aruco';
-import { makeProjectiveCalibration, mapContourToMm, checkIndependentDistance, calibrationExtrapolationRatio, rectifiedContourView } from './features/calibration/homography';
+import { makeProjectiveCalibration, projectPoint, mapContourToMm, checkIndependentDistance, calibrationExtrapolationRatio, rectifiedContourView } from './features/calibration/homography';
 import type { ProjectiveCalibration, Quad } from './features/calibration/homography';
+import { proposeSegmentation } from './features/segmentation/run';
+import type { SegmentationCandidate } from './features/segmentation/segment';
 import type { SolveInput } from './solver';
 
 type Page = 'dashboard'|'scan'|'inventory'|'nesting'|'production'|'analytics'|'settings';
@@ -114,6 +116,19 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [showCorrected,setShowCorrected]=useState(false);
   const [refPoints,setRefPoints]=useState<Point[]>([]);
   const [contour,setContour]=useState<Point[]>([]);
+  const [holes,setHoles]=useState<Point[][]>([]);
+  const [defects,setDefects]=useState<Point[][]>([]);
+  const [draft,setDraft]=useState<Point[]>([]);
+  const [drawLayer,setDrawLayer]=useState<'outer'|'hole'|'defect'>('outer');
+  const [editTool,setEditTool]=useState<'draw'|'insert'>('draw');
+  const [selectedVertex,setSelectedVertex]=useState<{layer:'outer'|'hole'|'defect'|'draft';ring:number;index:number}|null>(null);
+  const dragged=useRef<{layer:'outer'|'hole'|'defect'|'draft';ring:number;index:number}|null>(null);
+  const [segmenting,setSegmenting]=useState(false);
+  const [segmentThreshold,setSegmentThreshold]=useState('55');
+  const [foregroundSeed,setForegroundSeed]=useState<Point|null>(null);
+  const [pickSeed,setPickSeed]=useState(false);
+  const [segmentation,setSegmentation]=useState<{algorithm:string;threshold:number;coverage:number;pixelStep:number;reviewed:boolean;notes:string[]}|null>(null);
+  const [proposedHoles,setProposedHoles]=useState<Point[][]>([]);
   const [knownDistance,setKnownDistance]=useState('100');
   const [name,setName]=useState('');
   const [location,setLocation]=useState('Radionica');
@@ -147,6 +162,31 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const polyMm=transformed.points;
   const polyBounds=polyMm.length>=3?box(polyMm):null;
   const traceValid=contour.length>=3 && isSimple(polyMm) && !transformed.error;
+  const exclusionsMm=useMemo(()=>{
+    if(!calibrated||!traceValid)return {holes:[] as Point[][],defects:[] as Point[][],valid:false,error:''};
+    try{
+      const outerRaw=contour.map(p=>calibration?projectPoint(calibration.pixelToMm,p):
+        {x:p.x*mmPerPx,y:p.y*mmPerPx});
+      const origin=box(outerRaw);
+      const toMm=(ring:Point[])=>ring.map(p=>{
+        const value=calibration?projectPoint(calibration.pixelToMm,p):{x:p.x*mmPerPx,y:p.y*mmPerPx};
+        return {x:value.x-origin.minX,y:value.y-origin.minY};
+      });
+      const h=holes.map(toMm),d=defects.map(toMm);
+      for(const p of [...h,...d]){
+        if(!isSimple(p)||!contained(p,polyMm,[],0)||minEdgeDistance(p,polyMm)<.0001)
+          throw Error('Otvor ili oštećenje nije potpuno unutar spoljne konture.');
+      }
+      const all=[...h,...d];
+      for(let i=0;i<all.length;i++)for(let j=i+1;j<all.length;j++)
+        if(polygonsOverlap(all[i],all[j])||minEdgeDistance(all[i],all[j])<.0001)
+          throw Error('Otvori i oštećenja se sijeku ili dodiruju.');
+      return {holes:h,defects:d,valid:true,error:''};
+    }catch(e){return {holes:[] as Point[][],defects:[] as Point[][],valid:false,error:String(e)}}
+  },[calibrated,traceValid,contour,calibration,mmPerPx,polyMm,holes,defects]);
+  const netArea=exclusionsMm.valid?Math.max(0,area(polyMm)-
+    exclusionsMm.holes.reduce((sum,ring)=>sum+area(ring),0)-
+    exclusionsMm.defects.reduce((sum,ring)=>sum+area(ring),0)):0;
   const validation=useMemo(()=>{
     if(!calibration||checkPoints.length!==2)return null;
     try{return checkIndependentDistance(calibration.pixelToMm,checkPoints[0],checkPoints[1],Number(checkDistance))}
@@ -157,7 +197,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     try{return calibrationExtrapolationRatio(calibration.pixelToMm,contour,calibration.sourceCorners)}
     catch{return Infinity}
   },[calibration,contour]);
-  const readyForSave=calibrated&&traceValid&&(calMode==='line'||validation?.passed===true)&&extrapolation<12;
+  const readyForSave=calibrated&&traceValid&&exclusionsMm.valid&&(calMode==='line'||validation?.passed===true)&&extrapolation<12&&(!segmentation||segmentation.reviewed)&&draft.length===0;
   const correctedView=calibration&&traceValid?rectifiedContourView(contour,calibration.pixelToMm):null;
   useEffect(()=>{
     if(!image){setImageUrl('');return}
@@ -176,7 +216,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setDimensions({w:prepared.width,h:prepared.height});
       setImage(prepared.preview);setQuality(prepared.quality);
       setScanRef(saved);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
-      setContour([]);setMode('scale');setShowCorrected(false);
+      setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setForegroundSeed(null);
+      setMode('scale');setShowCorrected(false);
     }catch(error){
       setCaptureError('Fotografija nije obrađena: '+String(error));
       throw error;
@@ -192,7 +233,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setScanRef({id:record.id,imageId:record.imageId});
       setQuality({issues:[],notes:record.qualityWarnings});
       setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
-      setContour([]);setMode('scale');setShowCorrected(false);
+      setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setForegroundSeed(null);
+      setMode('scale');setShowCorrected(false);
     }catch(error){setCaptureError(String(error))}
     finally{setProcessing(false)}
   }
@@ -204,7 +246,91 @@ function Scan({onSaved}:{onSaved:()=>void}){
       if(calMode==='line')setRefPoints(points=>points.length<2?[...points,p]:[p]);
       else if(calMode==='rectangle')setQuadPoints(points=>points.length<4?[...points,p]:[p]);
     }else if(mode==='check')setCheckPoints(points=>points.length<2?[...points,p]:[p]);
-    else setContour(points=>[...points,p]);
+    else if(pickSeed){setForegroundSeed(p);setPickSeed(false)}
+    else if(drawLayer!=='outer')setDraft(points=>[...points,p]);
+    else if(editTool==='insert'&&contour.length>=3){
+      let index=-1,nearest=Infinity;
+      for(let i=0;i<contour.length;i++){
+        const a=contour[i],b=contour[(i+1)%contour.length];
+        const dx=b.x-a.x,dy=b.y-a.y,len=dx*dx+dy*dy;
+        const t=len?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len)):0;
+        const distance=Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);
+        if(distance<nearest){nearest=distance;index=i}
+      }
+      if(nearest<Math.max(18,dimensions.w/40)&&index>=0)
+        setContour(points=>[...points.slice(0,index+1),p,...points.slice(index+1)]);
+    } else setContour(points=>[...points,p]);
+  }
+  async function autoSegment(){
+    if(!image||!calibrated)return;
+    setSegmenting(true);setCaptureError('');
+    try{
+      const threshold=Number(segmentThreshold);
+      const result:SegmentationCandidate=await proposeSegmentation(image,threshold,foregroundSeed||undefined);
+      if(result.outer.length<3||!isSimple(result.outer))throw Error('Predlog konture nije jednostavan poligon.');
+      setContour(result.outer);
+      setProposedHoles(result.holes);
+      setHoles([]);setDefects([]);setDraft([]);setSelectedVertex(null);
+      setDrawLayer('outer');setEditTool('draw');setMode('trace');
+      setSegmentation({algorithm:result.algorithm,threshold,coverage:result.coverage,
+        pixelStep:result.pixelStep,reviewed:false,notes:result.warnings});
+    }catch(error){setCaptureError('Automatska kontura nije prihvaćena: '+String(error))}
+    finally{setSegmenting(false)}
+  }
+  function acceptProposedHoles(){
+    if(!proposedHoles.length)return;
+    setHoles(existing=>[...existing,...proposedHoles]);
+    setProposedHoles([]);setSegmentation(s=>s?{...s,reviewed:false}:s);
+  }
+  function finishExclusion(){
+    if(draft.length<3||!isSimple(draft)){
+      setCaptureError('Za zatvaranje otvora/oštećenja potrebna su najmanje tri temena bez samopresijecanja.');
+      return;
+    }
+    if(drawLayer==='hole')setHoles(old=>[...old,draft]);
+    if(drawLayer==='defect')setDefects(old=>[...old,draft]);
+    setDraft([]);setCaptureError('');setSegmentation(s=>s?{...s,reviewed:false}:s);
+  }
+  function startDrag(e:ReactPointerEvent<SVGCircleElement>,
+    layer:'outer'|'hole'|'defect'|'draft',index:number,ring=0){
+    if(mode!=='trace')return;
+    e.stopPropagation();
+    const selected={layer,ring,index};
+    setSelectedVertex(selected);
+    dragged.current=selected;
+    e.currentTarget.ownerSVGElement?.setPointerCapture(e.pointerId);
+  }
+  function moveDrag(e:ReactPointerEvent<SVGSVGElement>){
+    if(!dragged.current||mode!=='trace')return;
+    const next=fromPointer(e);
+    if(next.x<0||next.y<0||next.x>dimensions.w||next.y>dimensions.h)return;
+    const {layer,ring,index}=dragged.current;
+    if(layer==='outer')setContour(p=>p.map((v,i)=>i===index?next:v));
+    else if(layer==='draft')setDraft(p=>p.map((v,i)=>i===index?next:v));
+    else{
+      const update=layer==='hole'?setHoles:setDefects;
+      update(p=>p.map((poly,i)=>i===ring?poly.map((v,j)=>j===index?next:v):poly));
+    }
+    setSegmentation(s=>s?{...s,reviewed:false}:s);
+  }
+  function removeSelected(){
+    if(!selectedVertex)return;
+    const {layer,ring,index}=selectedVertex;
+    if(layer==='outer')setContour(p=>p.length>3?p.filter((_,i)=>i!==index):p);
+    else if(layer==='draft')setDraft(p=>p.filter((_,i)=>i!==index));
+    else{
+      const update=layer==='hole'?setHoles:setDefects;
+      update(p=>p.map((poly,i)=>i===ring?poly.filter((_,j)=>j!==index):poly)
+        .filter(poly=>poly.length>=3));
+    }
+    setSelectedVertex(null);setSegmentation(s=>s?{...s,reviewed:false}:s);
+  }
+  function removeExclusion(layer:'hole'|'defect',index:number){
+    (layer==='hole'?setHoles:setDefects)(items=>items.filter((_,i)=>i!==index));
+    setSelectedVertex(null);setSegmentation(s=>s?{...s,reviewed:false}:s);
+  }
+  function selectLayer(value:'outer'|'hole'|'defect'){
+    setDrawLayer(value);setDraft([]);setSelectedVertex(null);setEditTool('draw');
   }
   async function findMarkers(){
     if(!image)return;
@@ -225,7 +351,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
   }
   function changeCalibration(next:'line'|'rectangle'|'marker'){
     setCalMode(next);setRefPoints([]);setQuadPoints([]);setMarkers([]);setChosenMarker(null);
-    setContour([]);setCheckPoints([]);setMode('scale');setShowCorrected(false);setCaptureError('');
+    setContour([]);setCheckPoints([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);
+    setMode('scale');setShowCorrected(false);setCaptureError('');
   }
   async function save(){
     if(!image||!readyForSave||Number(thickness)<=0)return;
@@ -233,8 +360,9 @@ function Scan({onSaved}:{onSaved:()=>void}){
     try{
       const now=new Date().toISOString(),id=crypto.randomUUID(),imageId=scanRef?.imageId||crypto.randomUUID();
       await storeScan({id,label:name.trim()||'OSB ostatak '+id.slice(0,6),material:'OSB',
-        thicknessMm:Number(thickness),polygonMm:polyMm,holesMm:[],defectsMm:[],
-        areaMm2:area(polyMm),location:location.trim()||'Nepoznato',status:'MEASURED',
+        thicknessMm:Number(thickness),polygonMm:polyMm,holesMm:exclusionsMm.holes,defectsMm:exclusionsMm.defects,
+        areaMm2:netArea,segmentation:segmentation?{...segmentation,manualCorrections:true}:undefined,
+        location:location.trim()||'Nepoznato',status:'MEASURED',
         calibrationMethod:calibration?.method||'two-point-manual',
         mmPerPx:calibration?null:mmPerPx,calibration:calibration?{
           ...calibration,
@@ -247,7 +375,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     finally{setBusy(false)}
   }
   return <>
-    <Header title="Skeniranje" subtitle="Fotografija → kalibracija mjerila/perspektive → kontrola → kontura u milimetrima."/>
+    <Header title="Skeniranje" subtitle="Fotografija → kalibracija → automatska ili ručna kontura → otvori i oštećenja → inventar."/>
     <div className="scan-layout">
       <div className="panel canvas-panel">
         <div className="canvas-top"><h2>Fotografija ostatka</h2><span className="tag">Samo lokalni podaci</span></div>
@@ -258,11 +386,11 @@ function Scan({onSaved}:{onSaved:()=>void}){
             <button className={mode==='check'?'tab active':'tab'} onClick={()=>setMode('check')} disabled={!calibration}><CheckCircle2 size={15}/> 2. Kontrola</button>
             <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!calibrated}><Focus size={15}/> 3. Kontura</button>
           </div><div className="toolbar-right">
-            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):setContour(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
-            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
+            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):drawLayer==='outer'?setContour(p=>p.slice(0,-1)):setDraft(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
+            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
-            <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint}>
+            <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint} onPointerMove={moveDrag} onPointerUp={()=>{dragged.current=null}} onPointerCancel={()=>{dragged.current=null}} style={{touchAction:"none"}}>
               <image href={imageUrl} width={dimensions.w} height={dimensions.h} preserveAspectRatio="none" pointerEvents="none"/>
               {mode==='scale'&&calMode==='line'&&refPoints.length===2&&<line x1={refPoints[0].x} y1={refPoints[0].y} x2={refPoints[1].x} y2={refPoints[1].y} stroke="#ffdb84" strokeWidth={Math.max(3,dimensions.w/180)} strokeDasharray="10 8" pointerEvents="none"/>}
               {calMode==='rectangle'&&quadPoints.length>1&&
@@ -274,7 +402,24 @@ function Scan({onSaved}:{onSaved:()=>void}){
                   strokeWidth={Math.max(3,dimensions.w/180)} pointerEvents="none"/>}
               {contour.length>1&&<polyline points={coords(contour)} fill="none" stroke="#dfff9e" strokeWidth={Math.max(3,dimensions.w/200)} pointerEvents="none"/>}
               {contour.length>=3&&<polygon points={coords(contour)} fill="#b9e398" fillOpacity=".18" stroke="#dbffb1" strokeWidth={Math.max(2,dimensions.w/240)} pointerEvents="none"/>}
-              {(mode==='scale'?(calMode==='line'?refPoints:calMode==='rectangle'?quadPoints:selectedMarker?.corners||[]):mode==='check'?checkPoints:contour).map((p,i)=><circle key={i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/110)} fill="#ffce6e" stroke="#182925" strokeWidth={Math.max(2,dimensions.w/500)} pointerEvents="none"/>)}
+              {proposedHoles.map((ring,i)=><polygon key={'p'+i} points={coords(ring)}
+                fill="#ffc76d" fillOpacity=".22" stroke="#ffc76d" strokeDasharray="8 5" strokeWidth={Math.max(2,dimensions.w/320)} pointerEvents="none"/>)}
+              {holes.map((ring,i)=><polygon key={'h'+i} points={coords(ring)} fill="#ff875f" fillOpacity=".38" stroke="#ff9974" strokeWidth={Math.max(2,dimensions.w/220)} pointerEvents="none"/>)}
+              {defects.map((ring,i)=><polygon key={'d'+i} points={coords(ring)} fill="#ffcd44" fillOpacity=".36" stroke="#ffc54c" strokeWidth={Math.max(2,dimensions.w/220)} pointerEvents="none"/>)}
+              {draft.length>=2&&<polyline points={coords(draft)} fill="none" stroke="#56dff2" strokeWidth={Math.max(3,dimensions.w/210)} pointerEvents="none"/>}
+              {(mode==='scale'?(calMode==='line'?refPoints:calMode==='rectangle'?quadPoints:selectedMarker?.corners||[]):mode==='check'?checkPoints:[]).map((p,i)=>
+                <circle key={i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/110)} fill="#ffce6e" stroke="#182925" strokeWidth={Math.max(2,dimensions.w/500)} pointerEvents="none"/>)}
+              {mode==='trace'&&contour.map((p,i)=><circle key={'o'+i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/120)}
+                fill={selectedVertex?.layer==='outer'&&selectedVertex.index===i?'#fdeb64':'#ceef9b'} stroke="#102e27"
+                strokeWidth={Math.max(2,dimensions.w/470)} onPointerDown={e=>startDrag(e,'outer',i)}/>)}
+              {mode==='trace'&&holes.flatMap((ring,j)=>ring.map((p,i)=><circle key={'h'+j+'-'+i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/155)}
+                fill="#fca483" stroke="#102e27" strokeWidth={Math.max(2,dimensions.w/550)} onPointerDown={e=>startDrag(e,'hole',i,j)}/>))}
+              {mode==='trace'&&defects.flatMap((ring,j)=>ring.map((p,i)=><circle key={'d'+j+'-'+i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/155)}
+                fill="#ffe083" stroke="#102e27" strokeWidth={Math.max(2,dimensions.w/550)} onPointerDown={e=>startDrag(e,'defect',i,j)}/>))}
+              {mode==='trace'&&draft.map((p,i)=><circle key={'t'+i} cx={p.x} cy={p.y} r={Math.max(5,dimensions.w/120)}
+                fill="#83eaff" stroke="#102e27" strokeWidth={Math.max(2,dimensions.w/550)} onPointerDown={e=>startDrag(e,'draft',i)}/>)}
+              {foregroundSeed&&<circle cx={foregroundSeed.x} cy={foregroundSeed.y} r={Math.max(6,dimensions.w/115)}
+                fill="none" stroke="#ed72f7" strokeWidth={Math.max(3,dimensions.w/260)} pointerEvents="none"/>}
             </svg>
           </div>
           <div className="editor-hint">{mode==='scale'?
@@ -282,7 +427,11 @@ function Scan({onSaved}:{onSaved:()=>void}){
             calMode==='rectangle'?'Klikni 4 ugla pravougaone reference redom: gore lijevo → gore desno → dolje desno → dolje lijevo.':
             'Pronađi marker dugmetom u panelu i izaberi prepoznati ID.':
             mode==='check'?'Dodirni dvije kontrolne tačke sa poznatom nezavisnom dužinom na površini OSB-a.':
-            'Dodiruj uglove redom duž oboda ostatka. Kontura se zatvara automatski.'}</div>
+            pickSeed?'Dodirni dio OSB površine na fotografiji da odabereš komponentu za segmentaciju.':
+            drawLayer==='hole'?'Nacrtaj unutrašnji otvor, pa klikni „Završi otvor”.':
+            drawLayer==='defect'?'Nacrtaj oštećeno ili neupotrebljivo područje, pa klikni „Završi oštećenje”.':
+            editTool==='insert'?'Dodirni blizu ivice postojeće konture da dodaš novo teme.':
+            'Dodiruj uglove duž oboda; postojeća temena možeš prevlačiti prstom za korekciju.'}</div>
           {showCorrected&&correctedView&&correctedView.poly.length>=3&&
             <div className="rectified-preview" aria-label="Ispravljena vektorska kontura u mm">
               <h3>Perspektivno ispravljena vektorska kontura</h3>
@@ -364,12 +513,65 @@ function Scan({onSaved}:{onSaved:()=>void}){
           </p>}
         </div>}
         <div className="divider-line"/>
+        <section className="segmentation-panel" aria-label="Automatska kontura i uređivanje">
+          <h2>Automatska kontura · Faza 3</h2>
+          <p className="small-help">Lokalni algoritam izdvaja materijal od kontrastne podloge. Rezultat je predlog koji moraš pregledati.</p>
+          <div className="form-block">
+            <FormLabel>Prag boje pozadine (10–200)</FormLabel>
+            <input aria-label="Prag segmentacije" type="number" min="10" max="200" step="5" value={segmentThreshold} onChange={e=>setSegmentThreshold(e.target.value)}/>
+          </div>
+          <button className="secondary full" disabled={!image||!calibrated||segmenting||!Number.isFinite(Number(segmentThreshold))}
+            onClick={()=>void autoSegment()}>{segmenting?'Izdvajam konturu...':'Predloži konturu automatski'}</button>
+          <button className="secondary full" disabled={!image} onClick={()=>{setMode('trace');setPickSeed(true)}}>
+            {foregroundSeed?'Promijeni uzorak OSB-a':'Izaberi uzorak OSB-a na slici'}</button>
+          {segmentation&&<div className="segmentation-result">
+            <strong>Predlog: {Math.round(segmentation.coverage*100)}% slike · korak približno {segmentation.pixelStep.toFixed(2)} px</strong>
+            {segmentation.notes.map((n,i)=><p key={i}>{n}</p>)}
+            <label className="review-check"><input type="checkbox" checked={segmentation.reviewed}
+              onChange={e=>setSegmentation(s=>s?{...s,reviewed:e.target.checked}:s)}/>
+              Pregledao sam i ispravio konturu i otvore na fotografiji.</label>
+          </div>}
+          {proposedHoles.length>0&&<div className="suggested-openings">
+            <p>{proposedHoles.length} automatski predloženih unutrašnjih otvora (žuto). Provjeri prije prihvatanja.</p>
+            <div className="action-row">
+              <button className="secondary" onClick={acceptProposedHoles}>Prihvati predložene otvore</button>
+              <button className="secondary" onClick={()=>setProposedHoles([])}>Odbaci</button>
+            </div>
+          </div>}
+          <div className="form-block">
+            <FormLabel>Šta crtaš ili ispravljaš?</FormLabel>
+            <select aria-label="Sloj konture" value={drawLayer}
+              onChange={e=>{selectLayer(e.target.value as 'outer'|'hole'|'defect');setMode('trace')}}>
+              <option value="outer">Spoljna kontura</option>
+              <option value="hole">Unutrašnji otvor</option>
+              <option value="defect">Oštećenje / zabrana rezanja</option>
+            </select>
+          </div>
+          {drawLayer==='outer'?<div className="action-row">
+            <button className="secondary" onClick={()=>{setEditTool(editTool==='draw'?'insert':'draw');setMode('trace')}}>
+              {editTool==='insert'?'Vrati crtanje':'Dodaj teme na ivici'}</button>
+            <button className="secondary" disabled={!contour.length} onClick={()=>{setContour([]);setSegmentation(null);setProposedHoles([]);setSelectedVertex(null)}}>
+              Očisti konturu</button>
+          </div>:<div className="action-row">
+            <button className="primary" disabled={draft.length<3} onClick={finishExclusion}>
+              {drawLayer==='hole'?'Završi otvor':'Završi oštećenje'} ({draft.length})</button>
+            <button className="secondary" disabled={!draft.length} onClick={()=>setDraft([])}>Odbaci nacrt</button>
+          </div>}
+          {selectedVertex&&<button className="secondary full" onClick={removeSelected}>Izbriši izabrano teme</button>}
+          {holes.map((_,i)=><div className="exclusion-row" key={'h'+i}><span>Otvor {i+1}</span>
+            <button onClick={()=>removeExclusion('hole',i)}>Ukloni</button></div>)}
+          {defects.map((_,i)=><div className="exclusion-row" key={'d'+i}><span>Oštećenje {i+1}</span>
+            <button onClick={()=>removeExclusion('defect',i)}>Ukloni</button></div>)}
+          {exclusionsMm.error&&<p className="error-text">{exclusionsMm.error}</p>}
+        </section>
+        <div className="divider-line"/>
         <div className="form-block"><FormLabel>Naziv ostatka</FormLabel><input placeholder="npr. OSB L-12" value={name} onChange={e=>setName(e.target.value)}/></div>
         <div className="form-grid"><div className="form-block"><FormLabel>Debljina (mm)</FormLabel><input type="number" min="1" step="any" value={thickness} onChange={e=>setThickness(e.target.value)}/></div>
           <div className="form-block"><FormLabel>Lokacija</FormLabel><input value={location} onChange={e=>setLocation(e.target.value)}/></div></div>
         <div className="measurement-card">
           <div><span>Temena konture</span><strong>{contour.length}</strong></div>
-          <div><span>Površina</span><strong>{traceValid?formatArea(area(polyMm)):'—'} <small>m²</small></strong></div>
+          <div><span>Upotrebljiva površina</span><strong>{traceValid&&exclusionsMm.valid?formatArea(netArea):'—'} <small>m²</small></strong></div>
+          <div><span>Otvori / oštećenja</span><strong>{holes.length} / {defects.length}</strong></div>
           <div><span>Dimenzije obuhvata</span><strong>{polyBounds?Math.round(polyBounds.maxX)+' × '+Math.round(polyBounds.maxY):'—'} <small>mm</small></strong></div>
         </div>
         {!traceValid&&contour.length>=3&&<p className="error-text">Kontura je neispravna ili se presijeca. {transformed.error||'Poništi posljednje tačke.'}</p>}

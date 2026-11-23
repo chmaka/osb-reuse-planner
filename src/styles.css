@@ -211,3 +211,20 @@ p{line-height:1.6}
 .exclusion-row button{border:1px solid #d9dcca;background:#fff;border-radius:7px;padding:5px 11px;color:#8a4936;font-size:11px}
 .image-editor svg.photo-svg{touch-action:none}
 @media(max-width:530px){.segmentation-panel .action-row button{min-height:40px}}
+
+/* Phase 4 one-touch marker-guided scanning */
+.auto-scan-panel{display:grid;gap:12px;border:1px solid #c7d9c8;border-radius:12px;padding:15px;
+ background:linear-gradient(140deg,#f0f7ed,#f7f9f5);margin:14px 0}
+.auto-scan-panel h3{margin:0;color:#234931;font-size:15px}
+.auto-scan-panel .full{justify-content:center;min-height:43px}
+.auto-scan-panel .form-block{margin:0}
+.auto-scan-panel select{max-width:100%}
+.auto-progress{padding:10px;font-size:12px;background:#e6eff5;color:#23465b;border-radius:7px;margin:0}
+.auto-measurements{background:#fff;border:1px solid #c7dfc9;border-radius:10px;padding:12px;display:grid;gap:10px}
+.auto-measurements>strong{color:#245738;font-size:12px}
+.auto-measurements>div{display:flex;gap:8px;align-items:baseline;justify-content:space-between;
+ border-bottom:1px solid #edf1e8;padding-bottom:6px}
+.auto-measurements>div span{font-size:12px;color:#647368}
+.auto-measurements>div strong{font-size:15px;color:#244b33}
+.auto-measurements small{font-size:11px;line-height:1.5;color:#65796a}
+@media(max-width:470px){.auto-scan-panel{padding:11px}.auto-measurements>div{flex-wrap:wrap}}

@@ -19,3 +19,8 @@ Physical acceptance still pending: 20 real 18mm OSB scraps, separate validation 
 - Synthetic mask unit tests cover L-shaped offcuts, an internal hole, blank and full-foreground rejection, closed rings and simplification (no field precision claims).
 - Browser acceptance tests: take a synthetic image through upload/calibration/auto-contour worker, accept proposed hole, affirm review and persist; separately hand-draw a hole plus a defect, inspect their non-overlap/usable-area invariants, and attempt a deliberately invalid exclusion.
 - Real workshop backlog: 20 photographs across OSB materials, dark/bright worktables, shiny screws, pencil marking, curves, saw teeth, splinters and mixed background; measure missed-edge rate and wrong-hole detections. No physical accuracy asserted from synthetic CI tests.
+
+## Phase 4
+- Pure geometry unit tests: Re:bble 0.75 offset prompt points, bounded coordinates, binary mask contour extraction, ignore marker's false black/quiet-zone hole while preserving real holes, metric area and impossible masks.
+- E2E: synthetic photo containing in-app MIP36h12 marker on contrasting sheet should auto-find marker, populate mm measurements, and keep save disabled pending independent control and review. Test missing-marker path explicitly fails with no invented mm.
+- AI SlimSAM WebGPU inference not covered by synthetic CI: requires real-device demo with fetched model on Android/desktop. The local fallback is testable but is not evidence the model ran.

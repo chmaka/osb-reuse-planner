@@ -31,6 +31,7 @@ export async function inferMarkerSamMask(
 ):Promise<MaskData>{
  if(!('gpu' in navigator))throw Error('WebGPU nije dostupan na ovom uređaju; koristi brzu lokalnu segmentaciju.');
  const bitmap=await createImageBitmap(blob);
+ const originalWidth=bitmap.width,originalHeight=bitmap.height;
  let src:Blob;
  try{
    const ratio=Math.min(1,768/Math.max(bitmap.width,bitmap.height));
@@ -72,6 +73,6 @@ export async function inferMarkerSamMask(
    const binary=new Uint8Array(n);
    for(let i=0;i<n;i++)binary[i]=Number(mask.data[i*channels+best])>0?1:0;
    return {data:binary,width:mask.width,height:mask.height,
-     imageWidth:bitmap.width,imageHeight:bitmap.height};
+     imageWidth:originalWidth,imageHeight:originalHeight};
  }finally{URL.revokeObjectURL(url)}
 }

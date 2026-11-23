@@ -23,3 +23,9 @@ React, Vite, TypeScript, Dexie, Lucide, Vitest, Playwright, and their transitive
 - The original source includes MIT-style notices by Damiano Falcioni and Juan Mellado and additional BSD/OpenCV and dictionary notices.
 - Exact full upstream license/third-party texts: https://github.com/damianofalcioni/js-aruco2/blob/master/LICENSE.txt. These notices must accompany source/binary redistribution. The application does not claim all sublicensed components are pure MIT.
 - Detection runs locally and lazily in a Web Worker. The app generates printed-size SVG marker artwork from the included dictionary.
+
+## Re:bble and optional SlimSAM
+
+- Method reference: [Grangeot/Re-bble_2D_Scanner](https://github.com/Grangeot/Re-bble_2D_Scanner) © 2025 Maxence Grangeot, MIT license. Adapted concepts: marker-relative point prompts, perspective measurement, mask-to-contour pipeline. Original Python/SAM2 files are not shipped.
+- Optional browser ML runtime: [@huggingface/transformers](https://github.com/huggingface/transformers.js) v3.8.1, Apache-2.0; runtime ONNX components retain their own notices.
+- Model: [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform); model license and distribution obligations should be rechecked against model card before any redistribution. Model weights are downloaded by the user's browser only when AI mode is used; weights are not committed to GitHub.

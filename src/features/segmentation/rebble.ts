@@ -40,8 +40,9 @@ function centroid(ring:Polygon):Point{
 /** Exclude marker-shaped apparent holes. A printed marker on top of an OSB sheet is not a cutout. */
 export function removeMarkerOcclusions(holes:Polygon[],marker:ArucoGeometry,marginPx=8):Polygon[]{
   const bounds=box(marker.corners);
+  const effectiveMargin=Math.max(marginPx,(bounds.maxX-bounds.minX)*.2,(bounds.maxY-bounds.minY)*.2);
   return holes.filter(ring=>{
-    const middle=centroid(ring),radius=Math.max(8,marginPx);
+    const middle=centroid(ring),radius=effectiveMargin;
     const inside=moleculeInsideExpandedMarker(middle,marker.corners,radius);
     const bb=box(ring);
     const covered=bb.minX>=bounds.minX-radius&&bb.maxX<=bounds.maxX+radius&&

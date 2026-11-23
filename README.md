@@ -1,10 +1,10 @@
 # Meditera OSB Reuse Lab
 
-**Phase 0–1 · experimental browser-first OSB remnant digitization & reuse preview.**
+**Version 0.5.1 · experimental browser-first OSB remnant digitization, local physical QA & reuse preview.**
 
 React + TypeScript + Vite + Dexie/IndexedDB + PWA. Millimeters are canonical. No server is required for local inventory.
 
-## What actually works in this initial phase
+## Original MVP baseline (historical; later features described below)
 
 - Live camera via getUserMedia (when supported) or file upload; rear-camera preference, device switching, capability-gated torch/focus/exposure, ImageCapture/canvas fallback and original photo saved as Blob. HEIC conversion is lazily loaded when necessary. Capture records persist immediately; unsaved measurements can be resumed.
 - Pick two image points and specify real distance in **mm** to create a manually scaled trace.
@@ -14,7 +14,7 @@ React + TypeScript + Vite + Dexie/IndexedDB + PWA. Millimeters are canonical. No
 - Export an **unverified reference-only DXF** (AC1015, $INSUNITS=4, closed LWPOLYLINE) or JSON.
 - Installable PWA cache for shell; data remains per browser/device.
 
-**NOT implemented:** real Android or USB-camera physical validation, ArUco, perspective correction, automatic contour detection, holes/defect editor, independent physical verification, multi-remnant solver, production DXF, Cut2D validation, stock consumption and synchronization. No G-code generation.
+**Still not physically validated:** real Android/USB-camera accuracy and SlimSAM on production devices, 20 real workshop remnants, multi-remnant solver, Cut2D production DXF, stock consumption, sync and G-code. ArUco, planar calibration, basic automatic contour/holes and an independent physical QA evidence workflow have been implemented as experimental features below; they are not CNC-certified.
 
 ## Development
 
@@ -64,3 +64,11 @@ Open **Validacija**, choose an existing scanned offcut and physically measure th
 The dashboard measures signed/absolute width and height errors, MAE, RMSE, P95 (nearest-rank), maximum deviation, user-defined warning threshold compliance and a progress target of **20 different physical offcuts**. Repeat measurements of one offcut remain distinct trials but count only once toward 20. Export evidence as CSV/JSON for independent analysis. A fresh device with zero physical trials explicitly displays 'Nema podataka' rather than claiming zero measurement error.
 
 This validates **only external bounding width and height**. It does not establish local contour edge precision, concave/notched details, holes, kerf or industrial nesting/Cut2D correctness. Real workshop trial and Android WebGPU inference validation remain outstanding.
+
+### Version 0.5.1 — physical controls for individual OSB edges and holes
+
+Go to **Validacija → Kontrolne dužine — nepravilne ivice i otvori**. Select a stored offcut. Choose **Spoljašnja kontura**, an **Otvor**, or an **Oštećenje**. Select two clearly identifiable vertices (dropdowns or touch the endpoints on the vector drawing), measure the physical straight-line distance between the *same endpoints* using a ruler, enter that reading and the internal warning threshold. The application calculates and saves the **digital line length vs physical reading**, signed and absolute error, the ring/vertex indices and a frozen pair of source-coordinate points. It never updates a remnant to VERIFIED.
+
+The individual edge/hole QA table uses a Dexie **v4** additive migration without overwriting existing scans, images, remnants or v3 bounding-size checks. Both original width/height and newly added local-span records remain in the offline browser and are independently exportable as CSV/JSON. The existing overall pilot JSON export also includes these local checks.
+
+**Caution:** This measures straight-line separations between pairs of known vertices, not the full irregular perimeter length, surface flatness, saw kerf, missing splinters or the spatial error along an edge. Selecting clearly identifiable physical points is essential. Real workshop samples are still needed to quantify any tolerances.

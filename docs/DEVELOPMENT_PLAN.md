@@ -48,3 +48,10 @@ Software functionality is implemented in the pilot but **not accepted for CNC**.
 - User-facing Validacija panel, per-trial signed errors, warning classification, summary MAE/RMSE/P95 and 20-unique-OSB pilot progress (repeats do not count toward sample target).
 - CSV/JSON export and explicit 'no evidence' state; no quality or accuracy is asserted from synthetic tests.
 - Next acceptance: sample 20 physical irregular OSB remnants in workshop, take repeat photos with variable perspective/light, record independent dimensions and edge measurements, test SlimSAM on target Android phones, inspect 3 reference DXF outputs in Cut2D with operator. All quality claims remain conditional until such data exists.
+
+### Phase 5.2 (2026-11-23): local edge, holes and defects physical evidence
+- Additive Dexie v4 table `edgeChecks`: user-picked ring (outer/hole/defect), ring/vertex indices, frozen pair of coordinates, algorithm/revision, calculated mm span, independently measured physical span, instrument, workshop warning threshold and date.
+- Touch-friendly vector selection and dropdown fallback for selecting two identifiable polygon vertices on the same ring; handles concave external edges, internal openings and damaged zones.
+- Separate statistics (MAE, RMSE, nearest-rank P95 and worst absolute length error) and CSV/JSON exports. Previous v3 width-height metrics and inventory state remain unchanged.
+- Scope is point-to-point **straight-line** distances only, not entire contour displacement or camera reprojection bias. No physical data is generated automatically; at least 20 real OSB offcuts and verified Cut2D imports are still a release gate.
+- Subsequent: capture real Android samples and selected contour points with a ruler in the image; compare multiple views from different angles/lighting; evaluate optic distortion and model runtime on real Android, then a separate CNC-safe solver/export gate.

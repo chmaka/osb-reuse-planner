@@ -29,3 +29,8 @@ Physical acceptance still pending: 20 real 18mm OSB scraps, separate validation 
 - Unit tests: measured-vs-scan signed and absolute errors, finite/positive input guards, zero-record summaries as null, 20-distinct-remnant accounting, mean absolute error, root mean square error and nearest-rank P95; safe CSV formatting.
 - Playwright: programmatically seed a *synthetic fixture* remnant, open the Validacija UI, record operator dimensions, verify persistence across reload, repeat the same offcut without increasing 20-item sample progress, report larger-than-threshold error, download CSV, confirm original remnant status remains MEASURED.
 - Physical study remains unperformed. No statistical claims are based on seeded browser fixtures or mock imagery.
+
+## Phase 5.2 tests
+- Unit: choose adjacent and non-adjacent vertices from outer/holes/defects, reject impossible ring/vertex pairs, nonfinite or impossible physical lengths; sign + absolute error and zero-evidence summary; distinguish repeated checks and physical offcuts; neutralize CSV formula injection.
+- Browser: seeded irregular test offcut with real polygon/inner hole, select hole vertices and record physical test reading, verify immutable snapshot and MEASURED status, reload, inspect persisted record and CSV; select a concave outer edge then reject duplicate endpoints. These are **synthetic fixtures**, not measured material.
+- Real field: physically mark identical two reference vertices on OSB before using a ruler, log method and offset from reference marker. Full-profile edge deviation requires richer physical ground truth than two point-to-point lengths.

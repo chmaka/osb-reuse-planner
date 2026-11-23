@@ -868,7 +868,7 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 5 · PILOT</span></div>
+        <span className="version-pill">FAZA 5.2 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}

@@ -24,6 +24,7 @@ import { inferMarkerSamMask } from './features/segmentation/sam';
 import { markerPromptPoints, maskToRebbleContours, metricDimensions, removeMarkerOcclusions } from './features/segmentation/rebble';
 import type { SolveInput } from './solver';
 import PilotValidation from './features/validation/PilotValidation';
+import InventoryAnalytics from './features/analytics/InventoryAnalytics';
 
 type Page = 'dashboard'|'scan'|'inventory'|'validation'|'nesting'|'production'|'analytics'|'settings';
 const pages:{id:Page;title:string;Icon:typeof Box}[]=[
@@ -839,12 +840,9 @@ function Planned({title,description,items}:{title:string;description:string;item
     <div className="planned-list">{items.map(i=><div key={i}><CheckCircle2 size={16}/>{i}</div>)}</div></div></>;
 }
 function Analytics({remnants}:{remnants:Remnant[]}){
-  const total=remnants.reduce((s,r)=>s+r.areaMm2,0);
-  return <><Header title="Analitika" subtitle="Samo direktno evidenirana geometrija, bez izmišljenih ušteda."/>
-    <div className="metrics"><Metric title="Broj zapisa" value={String(remnants.length)} Icon={Box}/>
-      <Metric title="Izmjerena površina" value={formatArea(total)} unit="m²" Icon={Grid2x2}/>
-      <Metric title="Potvrđene uštede" value="—" Icon={Activity}/></div>
-    <Notice>Ušteda materijala se ne može izračunati dok operater ne potvrdi fizički izveden rez i stvarne troškove.</Notice></>;
+  return <><Header title="Analitika" subtitle="Evidencija geometrije iz lokalnog inventara. Bez procjene finansijskih ili materijalnih ušteda."/>
+    <InventoryAnalytics remnants={remnants}/>
+  </>;
 }
 function SettingsPage(){
   return <Planned title="Podešavanja" description="Lokalna konfiguracija, kopije i profili mjerenja."

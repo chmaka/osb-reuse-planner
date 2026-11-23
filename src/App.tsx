@@ -75,9 +75,9 @@ function Dashboard({remnants,onNavigate}:{remnants:Remnant[];onNavigate:(p:Page)
       <Metric title="Za fizičku provjeru" value={String(remnants.filter(r=>r.status==='MEASURED').length)} Icon={Ruler}/>
     </div>
     <section className="dashboard-grid">
-      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 2</div>
+      <div className="panel hero-panel"><div className="eyebrow pale">RADNI PROCES · FAZA 3</div>
         <h2>Od fotografije do digitalne konture.</h2>
-        <p>Fotografiši ostatak, definiši dvije referentne tačke, unesi njihovo rastojanje u milimetrima i nacrtaj obod. Podaci se čuvaju lokalno.</p>
+        <p>Fotografiši OSB ostatak, odredi mjerilo ili ArUco marker, zatim predloži konturu automatski ili je iscrtaj i ispravi ručno. Provjeri otvore i oštećenja; sve ostaje lokalno.</p>
         <button className="light-button" onClick={()=>onNavigate('scan')}>Pokreni skeniranje <ArrowRight size={17}/></button>
         <div className="hero-figure"><div className="fragment f-one"/><div className="fragment f-two"/><div className="fragment f-three"/></div>
       </div>
@@ -123,6 +123,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [editTool,setEditTool]=useState<'draw'|'insert'>('draw');
   const [selectedVertex,setSelectedVertex]=useState<{layer:'outer'|'hole'|'defect'|'draft';ring:number;index:number}|null>(null);
   const dragged=useRef<{layer:'outer'|'hole'|'defect'|'draft';ring:number;index:number}|null>(null);
+  const segmentGeneration=useRef(0);
   const [segmenting,setSegmenting]=useState(false);
   const [segmentThreshold,setSegmentThreshold]=useState('55');
   const [foregroundSeed,setForegroundSeed]=useState<Point|null>(null);
@@ -223,6 +224,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     cardHeight,markerSize,markerId,checkDistance,segmentThreshold,foregroundSeed,
     drawLayer,segmentation,name,location,thickness]);
   async function acceptImage(raw:Blob, source:PhotoSource):Promise<void>{
+    segmentGeneration.current++;setSegmenting(false);setPickSeed(false);
     setCaptureError('');setProcessing(true);
     try{
       const prepared=await preparePhoto(raw);
@@ -242,6 +244,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     }finally{setProcessing(false)}
   }
   async function resumeCaptured(record:ScanRecord):Promise<void>{
+    segmentGeneration.current++;setSegmenting(false);setPickSeed(false);
     setCaptureError('');setProcessing(true);
     try{
       const asset=await db.images.get(record.imageId);
@@ -270,14 +273,14 @@ function Scan({onSaved}:{onSaved:()=>void}){
     finally{setProcessing(false)}
   }
   function addPoint(e:ReactPointerEvent<SVGSVGElement>){
-    if(!image||!dimensions.w)return;
+    if(!image||!dimensions.w||segmenting)return;
     const p=fromPointer(e);
     if(p.x<0||p.y<0||p.x>dimensions.w||p.y>dimensions.h)return;
     if(mode==='scale'){
       if(calMode==='line')setRefPoints(points=>points.length<2?[...points,p]:[p]);
       else if(calMode==='rectangle')setQuadPoints(points=>points.length<4?[...points,p]:[p]);
     }else if(mode==='check')setCheckPoints(points=>points.length<2?[...points,p]:[p]);
-    else if(pickSeed){setForegroundSeed(p);setPickSeed(false)}
+    else if(pickSeed){segmentGeneration.current++;setSegmenting(false);setForegroundSeed(p);setPickSeed(false)}
     else if(drawLayer!=='outer'){setDraft(points=>[...points,p]);setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s);}
     else if(editTool==='insert'&&contour.length>=3){
       let index=-1,nearest=Infinity;
@@ -296,10 +299,12 @@ function Scan({onSaved}:{onSaved:()=>void}){
   }
   async function autoSegment(){
     if(!image||!calibrated)return;
+    const current=++segmentGeneration.current;
     setSegmenting(true);setCaptureError('');
     try{
       const threshold=Number(segmentThreshold);
       const result:SegmentationCandidate=await proposeSegmentation(image,threshold,foregroundSeed||undefined);
+      if(current!==segmentGeneration.current)return;
       if(result.outer.length<3||!isSimple(result.outer))throw Error('Predlog konture nije jednostavan poligon.');
       setContour(result.outer);
       setProposedHoles(result.holes);
@@ -307,8 +312,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setDrawLayer('outer');setEditTool('draw');setMode('trace');
       setSegmentation({algorithm:result.algorithm,threshold,coverage:result.coverage,
         pixelStep:result.pixelStep,reviewed:false,edited:false,notes:result.warnings});
-    }catch(error){setCaptureError('Automatska kontura nije prihvaćena: '+String(error))}
-    finally{setSegmenting(false)}
+    }catch(error){if(current===segmentGeneration.current)setCaptureError('Automatska kontura nije prihvaćena: '+String(error))}
+    finally{if(current===segmentGeneration.current)setSegmenting(false)}
   }
   function acceptProposedHoles(){
     if(!proposedHoles.length)return;
@@ -383,6 +388,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     }catch(error){setCaptureError('Marker nije generisan: '+String(error))}
   }
   function changeCalibration(next:'line'|'rectangle'|'marker'){
+    segmentGeneration.current++;setSegmenting(false);setPickSeed(false);
     setCalMode(next);setRefPoints([]);setQuadPoints([]);setMarkers([]);setChosenMarker(null);
     setContour([]);setCheckPoints([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);
     setMode('scale');setShowCorrected(false);setCaptureError('');
@@ -420,7 +426,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
             <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!calibrated}><Focus size={15}/> 3. Kontura</button>
           </div><div className="toolbar-right">
             <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>{mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):drawLayer==='outer'?setContour(p=>p.slice(0,-1)):setDraft(p=>p.slice(0,-1));setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s)}}><RotateCcw size={17}/></button>
-            <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
+            <button title="Nova fotografija" className="icon-btn" onClick={()=>{segmentGeneration.current++;setSegmenting(false);setPickSeed(false);setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
             <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint} onPointerMove={moveDrag} onPointerUp={()=>{dragged.current=null}} onPointerCancel={()=>{dragged.current=null}} style={{touchAction:"none"}}>
@@ -752,7 +758,7 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 2 · PILOT</span></div>
+        <span className="version-pill">FAZA 3 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}

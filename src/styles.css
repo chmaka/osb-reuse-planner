@@ -228,3 +228,37 @@ p{line-height:1.6}
 .auto-measurements>div strong{font-size:15px;color:#244b33}
 .auto-measurements small{font-size:11px;line-height:1.5;color:#65796a}
 @media(max-width:470px){.auto-scan-panel{padding:11px}.auto-measurements>div{flex-wrap:wrap}}
+
+/* Phase 5: independent measurements and pilot QA */
+.pilot-page{display:grid;gap:18px}
+.pilot-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.pilot-metrics .metric{min-width:0}
+.pilot-value{font-size:clamp(16px,1.65vw,25px)!important}
+.pilot-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.pilot-entry,.pilot-results{display:grid;gap:13px;min-width:0}
+.pilot-entry .form-grid{margin:0}
+.pilot-entry .full{justify-content:center}
+.pilot-entry textarea{font:inherit;resize:vertical;width:100%;min-height:85px;border:1px solid #d4d9d0;border-radius:8px;padding:10px;box-sizing:border-box;color:#263d30}
+.pilot-entry label{cursor:default}
+.pilot-results h3{margin:9px 0 0;font-size:13px}
+.pilot-stats-table{display:grid;gap:0}
+.pilot-stats-table>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:9px 0;border-bottom:1px solid #e8ece4;font-size:12px}
+.pilot-stats-table>div span{color:#64746b}
+.pilot-stats-table>div strong{font-weight:700;color:#243e2d;font-variant-numeric:tabular-nums}
+.pilot-caution{display:flex;gap:10px;align-items:flex-start;background:#fff8e8;color:#795b31;border:1px solid #f0dba9;padding:11px;border-radius:9px;font-size:12px;line-height:1.5}
+.pilot-caution p{margin:0}
+.pilot-groups,.pilot-entries{display:grid;gap:8px;max-height:410px;overflow-y:auto;padding-right:3px}
+.pilot-groups>div{display:grid;gap:4px;border-bottom:1px solid #edf0eb;padding:9px 0;font-size:12px;overflow-wrap:anywhere}
+.pilot-groups span{color:#637168}
+.pilot-export-actions{display:flex;gap:10px;flex-wrap:wrap}
+.pilot-export-actions button{display:flex;gap:7px;align-items:center;justify-content:center;flex:1;font-size:12px;padding:10px 8px}
+.pilot-trial{border:1px solid #dce4d5;border-radius:10px;padding:12px;display:grid;gap:6px;background:#fbfcf9}
+.pilot-trial-heading{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.pilot-trial small{color:#788578}
+.pilot-trial p{font-size:12px;line-height:1.4;overflow-wrap:anywhere;margin:0}
+.pilot-pass,.pilot-fail{font-size:11px;font-weight:600;padding:4px 7px;border-radius:6px}
+.pilot-pass{background:#e1f1db;color:#345e39}
+.pilot-fail{background:#ffebdd;color:#8f452e}
+.pilot-success{font-size:12px;color:#33673b;line-height:1.55;background:#e9f7e9;border-radius:8px;padding:11px;margin:0}
+@media(max-width:1040px){.pilot-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.pilot-layout{grid-template-columns:1fr}}
+@media(max-width:540px){.pilot-metrics{gap:8px}.pilot-layout{gap:12px}.pilot-trial-heading{align-items:flex-start}}

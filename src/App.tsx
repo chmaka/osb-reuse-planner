@@ -23,12 +23,14 @@ import type { SegmentationCandidate } from './features/segmentation/segment';
 import { inferMarkerSamMask } from './features/segmentation/sam';
 import { markerPromptPoints, maskToRebbleContours, metricDimensions, removeMarkerOcclusions } from './features/segmentation/rebble';
 import type { SolveInput } from './solver';
+import PilotValidation from './features/validation/PilotValidation';
 
-type Page = 'dashboard'|'scan'|'inventory'|'nesting'|'production'|'analytics'|'settings';
+type Page = 'dashboard'|'scan'|'inventory'|'validation'|'nesting'|'production'|'analytics'|'settings';
 const pages:{id:Page;title:string;Icon:typeof Box}[]=[
   {id:'dashboard',title:'Pregled',Icon:Grid2x2},
   {id:'scan',title:'Skeniranje',Icon:Camera},
   {id:'inventory',title:'Inventar',Icon:Package},
+  {id:'validation',title:'Validacija',Icon:ClipboardCheck},
   {id:'nesting',title:'Nesting',Icon:Layers3},
   {id:'production',title:'Proizvodnja',Icon:ClipboardCheck},
   {id:'analytics',title:'Analitika',Icon:Activity},
@@ -866,18 +868,19 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 4 · PILOT</span></div>
+        <span className="version-pill">FAZA 5 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}
         {page==='inventory'&&<Inventory remnants={remnants} onNavigate={go}/>}
+        {page==='validation'&&<PilotValidation remnants={remnants}/>}
         {page==='nesting'&&<Nesting remnants={remnants}/>}
         {page==='production'&&<Planned title="Proizvodnja" description="Priprema radnih naloga i stvarna evidencija reza." items={['Povezivanje odobrenih ostataka i radnih naloga','Fizička provjera stezanja i koordinatnog početka','Potvrda izvršenog rezanja i preostalih ostataka','Potvrđen Cut2D DXF workflow']}/>}
         {page==='analytics'&&<Analytics remnants={remnants}/>}
         {page==='settings'&&<SettingsPage/>}
       </main>
     </div>
-    <nav className="mobile-nav">{pages.filter(p=>['scan','inventory','nesting','production'].includes(p.id)).map(({id,title,Icon})=>
+    <nav className="mobile-nav">{pages.filter(p=>['scan','inventory','validation','nesting'].includes(p.id)).map(({id,title,Icon})=>
       <button key={id} className={page===id?'selected':''} onClick={()=>go(id)}><Icon size={21}/><small>{title}</small></button>)}</nav>
   </div>;
 }

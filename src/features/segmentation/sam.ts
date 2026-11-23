@@ -52,7 +52,10 @@ export async function inferMarkerSamMask(
    progress?.('SAM prepoznaje oblik OSB ostatka...');
    const input=await RawImage.fromURL(url);
    const imageData=await processor(input);
-   const embeddings=await model.get_image_embeddings(imageData);
+   // Transformers.js exposes these SAM-specific runtime methods; its generic factory
+   // intentionally types the result as the broader PreTrainedModel/Processor interfaces.
+   const sam=model as typeof model & {get_image_embeddings:(inputs:typeof imageData)=>Promise<Record<string,Tensor>>};
+   const embeddings=await sam.get_image_embeddings(imageData);
    const resized=imageData.reshaped_input_sizes[0];
    const prompt=markerPromptPoints(marker,input.width,input.height);
    validation(input.width,input.height,prompt);
@@ -60,7 +63,10 @@ export async function inferMarkerSamMask(
    const input_points=new Tensor('float32',Float32Array.from(values),[1,1,prompt.length,2]);
    const input_labels=new Tensor('int64',BigInt64Array.from(prompt.map(p=>BigInt(p.label))),[1,1,prompt.length]);
    const {pred_masks,iou_scores}=await model({...embeddings,input_points,input_labels});
-   const all=await processor.post_process_masks(
+   const samProcessor=processor as typeof processor & {post_process_masks:(
+     masks:typeof pred_masks,original:typeof imageData.original_sizes,
+     resized:typeof imageData.reshaped_input_sizes)=>Promise<Tensor[][]>};
+   const all=await samProcessor.post_process_masks(
      pred_masks,imageData.original_sizes,imageData.reshaped_input_sizes);
    const mask=RawImage.fromTensor(all[0][0]);
    const scores=Array.from(iou_scores.data,Number);

@@ -67,6 +67,7 @@ export function summarizePilot(trials:ValidationTrial[],target=20):PilotStats{
 }
 function cell(value:string|number):string{
   const text=String(value);
+  if(typeof value==='number')return '"'+text+'"';
   // Spreadsheet formula-injection protection for untrusted labels, device descriptions and notes.
   const safe=/^[\s]*[=+@\-]/.test(text)?"'"+text:text;
   return '"'+safe.replaceAll('"','""')+'"';

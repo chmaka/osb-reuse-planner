@@ -197,13 +197,31 @@ function Scan({onSaved}:{onSaved:()=>void}){
     try{return calibrationExtrapolationRatio(calibration.pixelToMm,contour,calibration.sourceCorners)}
     catch{return Infinity}
   },[calibration,contour]);
-  const readyForSave=calibrated&&traceValid&&exclusionsMm.valid&&(calMode==='line'||validation?.passed===true)&&extrapolation<12&&(!segmentation||segmentation.reviewed)&&draft.length===0;
+  const readyForSave=calibrated&&traceValid&&exclusionsMm.valid&&(calMode==='line'||validation?.passed===true)&&extrapolation<12&&(!segmentation||segmentation.reviewed)&&proposedHoles.length===0&&draft.length===0;
   const correctedView=calibration&&traceValid?rectifiedContourView(contour,calibration.pixelToMm):null;
   useEffect(()=>{
     if(!image){setImageUrl('');return}
     const url=URL.createObjectURL(image);setImageUrl(url);
     return ()=>URL.revokeObjectURL(url);
   },[image]);
+  // Debounced metadata-only updates to the captured image record.
+  useEffect(()=>{
+    if(!scanRef||processing)return;
+    const id=scanRef.id;
+    const timeout=window.setTimeout(()=>{
+      void db.scans.update(id,{draft:{
+        mode,calMode,refPoints,quadPoints,checkPoints,contour,
+        holesMmDraft:holes,defectsMmDraft:defects,pendingRing:draft,proposedHoles,
+        markers,chosenMarker,knownDistance,cardWidth,cardHeight,markerSize,markerId,
+        checkDistance,segmentThreshold,foregroundSeed,drawLayer,segmentation,
+        name,location,thickness,updatedAt:new Date().toISOString()
+      }}).catch(e=>setCaptureError('Radna kontura nije sačuvana offline: '+String(e)));
+    },650);
+    return ()=>window.clearTimeout(timeout);
+  },[scanRef,processing,mode,calMode,refPoints,quadPoints,checkPoints,contour,holes,
+    defects,draft,proposedHoles,markers,chosenMarker,knownDistance,cardWidth,
+    cardHeight,markerSize,markerId,checkDistance,segmentThreshold,foregroundSeed,
+    drawLayer,segmentation,name,location,thickness]);
   async function acceptImage(raw:Blob, source:PhotoSource):Promise<void>{
     setCaptureError('');setProcessing(true);
     try{
@@ -230,11 +248,24 @@ function Scan({onSaved}:{onSaved:()=>void}){
       if(!asset)throw new Error('Nedostaje originalna fotografija.');
       setImage(asset.normalizedBlob||asset.blob);
       setDimensions({w:record.width,h:record.height});
-      setScanRef({id:record.id,imageId:record.imageId});
       setQuality({issues:[],notes:record.qualityWarnings});
       setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
-      setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setForegroundSeed(null);
-      setMode('scale');setShowCorrected(false);
+      const saved=record.draft;
+      setContour(saved?.contour||[]);
+      setHoles(saved?.holesMmDraft||[]);setDefects(saved?.defectsMmDraft||[]);
+      setDraft(saved?.pendingRing||[]);setProposedHoles(saved?.proposedHoles||[]);
+      setSegmentation(saved?.segmentation||null);setForegroundSeed(saved?.foregroundSeed||null);
+      setRefPoints(saved?.refPoints||[]);setQuadPoints(saved?.quadPoints||[]);
+      setCheckPoints(saved?.checkPoints||[]);setMarkers(saved?.markers||[]);
+      setChosenMarker(saved?.chosenMarker??null);setCalMode(saved?.calMode||'line');
+      setKnownDistance(saved?.knownDistance||'100');setCardWidth(saved?.cardWidth||'210');
+      setCardHeight(saved?.cardHeight||'297');setMarkerSize(saved?.markerSize||'80');
+      setMarkerId(saved?.markerId||'0');setCheckDistance(saved?.checkDistance||'100');
+      setSegmentThreshold(saved?.segmentThreshold||'55');
+      setDrawLayer(saved?.drawLayer||'outer');setName(saved?.name||'');
+      setLocation(saved?.location||'Radionica');setThickness(saved?.thickness||'18');
+      setMode(saved?.mode||'scale');setShowCorrected(false);
+      setScanRef({id:record.id,imageId:record.imageId});
     }catch(error){setCaptureError(String(error))}
     finally{setProcessing(false)}
   }
@@ -388,7 +419,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
             <button className={mode==='check'?'tab active':'tab'} onClick={()=>setMode('check')} disabled={!calibration}><CheckCircle2 size={15}/> 2. Kontrola</button>
             <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!calibrated}><Focus size={15}/> 3. Kontura</button>
           </div><div className="toolbar-right">
-            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):drawLayer==='outer'?setContour(p=>p.slice(0,-1)):setDraft(p=>p.slice(0,-1))}><RotateCcw size={17}/></button>
+            <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>{mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):drawLayer==='outer'?setContour(p=>p.slice(0,-1)):setDraft(p=>p.slice(0,-1));setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s)}}><RotateCcw size={17}/></button>
             <button title="Nova fotografija" className="icon-btn" onClick={()=>{setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
@@ -565,6 +596,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
           {defects.map((_,i)=><div className="exclusion-row" key={'d'+i}><span>Oštećenje {i+1}</span>
             <button onClick={()=>removeExclusion('defect',i)}>Ukloni</button></div>)}
           {exclusionsMm.error&&<p className="error-text">{exclusionsMm.error}</p>}
+          {proposedHoles.length>0&&<p className="error-text">Sve predložene otvore moraš prihvatiti ili odbaciti prije čuvanja.</p>}
+          <p className="small-help">Nedovršene konture se čuvaju na ovom uređaju i mogu se nastaviti nakon osvježavanja stranice.</p>
         </section>
         <div className="divider-line"/>
         <div className="form-block"><FormLabel>Naziv ostatka</FormLabel><input placeholder="npr. OSB L-12" value={name} onChange={e=>setName(e.target.value)}/></div>

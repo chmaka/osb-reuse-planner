@@ -34,12 +34,30 @@ export interface Remnant {
 }
 export interface ImageAsset { id: string; blob: Blob; normalizedBlob?: Blob; mime: string; createdAt: string }
 export type PhotoSource='camera'|'upload';
+export interface ScanDraft {
+  mode:'scale'|'check'|'trace';
+  calMode:'line'|'rectangle'|'marker';
+  refPoints:Point[];quadPoints:Point[];checkPoints:Point[];
+  contour:Point[];holesMmDraft:Polygon[];defectsMmDraft:Polygon[];
+  pendingRing:Point[];proposedHoles:Polygon[];
+  markers:{id:number;hammingDistance:number;corners:[Point,Point,Point,Point]}[];
+  chosenMarker:number|null;
+  knownDistance:string;cardWidth:string;cardHeight:string;
+  markerSize:string;markerId:string;checkDistance:string;
+  segmentThreshold:string;foregroundSeed:Point|null;
+  drawLayer:'outer'|'hole'|'defect';
+  segmentation:{
+    algorithm:string;threshold:number;coverage:number;pixelStep:number;
+    reviewed:boolean;edited:boolean;notes:string[]
+  }|null;
+  name:string;location:string;thickness:string;updatedAt:string;
+}
 export interface ScanRecord {
   id: string; imageId: string; status: 'CAPTURED'|'MEASURED';
   source: PhotoSource; width: number; height: number;
   qualityWarnings: string[]; conversion: 'native'|'heic-converted';
   originalMime: string; originalName?: string;
-  createdAt: string; remnantId?: string;
+  createdAt: string; remnantId?: string;draft?:ScanDraft;
 }
 export interface Part {
   id: string; name: string; polygonMm: Polygon; quantity: number;

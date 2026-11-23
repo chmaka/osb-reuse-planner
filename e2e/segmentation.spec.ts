@@ -42,6 +42,8 @@ async function allRemnants(page:import('@playwright/test').Page){
 test('automatic local segmentation and holes: requires operator review, stores exclusions',async({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
   const click=await uploadSynthetic(page,true);
   await click(.12,.08);await click(.32,.08);
   await page.getByRole('button',{name:'Predloži konturu automatski'}).click();
@@ -66,6 +68,8 @@ test('automatic local segmentation and holes: requires operator review, stores e
 test('manual inner hole and separate defect are preserved and subtracted from usable area',async({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
   console.log('TRACE: synthetic upload');
   const click=await uploadSynthetic(page,false);
   console.log('TRACE: calibration');
@@ -106,6 +110,8 @@ test('manual inner hole and separate defect are preserved and subtracted from us
 test('unclosed draft excludes saving and is restored after page reload',async({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
   const click=await uploadSynthetic(page,false);
   await click(.1,.1);await click(.3,.1);
   await page.getByRole('button',{name:/3\. Kontura/}).click();
@@ -119,6 +125,8 @@ test('unclosed draft excludes saving and is restored after page reload',async({p
   await expect(page.getByRole('button',{name:/Nastavi mjerenje/})).toBeVisible();
   await page.reload();
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
   await page.getByRole('button',{name:/Nastavi mjerenje/}).click();
   await expect(page.locator('svg.photo-svg')).toBeVisible();
   await expect(page.getByLabel('Sloj konture')).toHaveValue('hole');

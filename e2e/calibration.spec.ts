@@ -3,6 +3,8 @@ import {test,expect} from '@playwright/test';
 test('projective four-corner calibration requires independent check, then persists metric contour',async({page})=>{
  await page.goto('/');
  await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
  const data=await page.evaluate(()=>{
    const c=document.createElement('canvas');c.width=600;c.height=400;
    const ctx=c.getContext('2d')!;ctx.fillStyle='#292d2a';ctx.fillRect(0,0,600,400);
@@ -50,6 +52,8 @@ test('projective four-corner calibration requires independent check, then persis
 test('marker generator downloads printable SVG while preserving manual fallback',async({page})=>{
  await page.goto('/');
  await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
  await page.getByLabel('Metoda kalibracije').selectOption('marker');
  await page.getByLabel('Strana markera').fill('80');
  await page.getByLabel('ID markera').fill('4');
@@ -71,6 +75,8 @@ test('marker generator downloads printable SVG while preserving manual fallback'
 test('locally generated printed marker is detected from a synthetic photographed scene in worker',async({page})=>{
  await page.goto('/');
  await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
  const encoded=await page.evaluate(async()=>{
    const {generateMarkerSvg}=await import('/src/features/calibration/aruco.ts');
    const content=await generateMarkerSvg(4,80);

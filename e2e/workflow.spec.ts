@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 test('photo upload, measured polygon, persistent inventory, irregular layout and reference DXF',async({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  // Manual regression path: the one-touch automatic workflow has its own E2E suite.
+  await page.getByRole('checkbox',{name:/Auto-skeniranje odmah/}).uncheck();
   await expect(page.getByText('Fotografija ostatka')).toBeVisible();
   const dataUrl=await page.evaluate(()=>{
     const c=document.createElement('canvas');c.width=600;c.height=400;

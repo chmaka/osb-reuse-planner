@@ -54,7 +54,8 @@ export async function inferMarkerSamMask(
    const imageData=await processor(input);
    // Transformers.js exposes these SAM-specific runtime methods; its generic factory
    // intentionally types the result as the broader PreTrainedModel/Processor interfaces.
-   const sam=model as typeof model & {get_image_embeddings:(inputs:typeof imageData)=>Promise<Record<string,Tensor>>};
+   type SamTensor = InstanceType<typeof Tensor>;
+   const sam=model as typeof model & {get_image_embeddings:(inputs:typeof imageData)=>Promise<Record<string,SamTensor>>};
    const embeddings=await sam.get_image_embeddings(imageData);
    const resized=imageData.reshaped_input_sizes[0];
    const prompt=markerPromptPoints(marker,input.width,input.height);
@@ -65,7 +66,7 @@ export async function inferMarkerSamMask(
    const {pred_masks,iou_scores}=await model({...embeddings,input_points,input_labels});
    const samProcessor=processor as typeof processor & {post_process_masks:(
      masks:typeof pred_masks,original:typeof imageData.original_sizes,
-     resized:typeof imageData.reshaped_input_sizes)=>Promise<Tensor[][]>};
+     resized:typeof imageData.reshaped_input_sizes)=>Promise<SamTensor[][]>};
    const all=await samProcessor.post_process_masks(
      pred_masks,imageData.original_sizes,imageData.reshaped_input_sizes);
    const mask=RawImage.fromTensor(all[0][0]);

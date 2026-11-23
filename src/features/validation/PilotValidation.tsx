@@ -5,12 +5,14 @@ import {db,recordValidation} from '../../db';
 import {downloadText} from '../../dxf';
 import type {Remnant} from '../../types';
 import {evaluateTrial,exportPilotCsv,predictedBounds,summarizePilot} from './metrics';
+import LocalEdgeValidation from './LocalEdgeValidation';
 
 /** Physical pilot log: scanned values are immutable snapshots of a saved outline,
  * and actual values must be measured separately by the workshop operator.
  */
 export default function PilotValidation({remnants}:{remnants:Remnant[]}){
  const trials=useLiveQuery(()=>db.validation.orderBy('at').reverse().toArray(),[])||[];
+ const edgeChecks=useLiveQuery(()=>db.edgeChecks.orderBy('at').reverse().toArray(),[])||[];
  const [selected,setSelected]=useState('');
  const remnant=remnants.find(r=>r.id===(selected||remnants[0]?.id));
  const [width,setWidth]=useState(''),[height,setHeight]=useState('');
@@ -48,9 +50,9 @@ export default function PilotValidation({remnants}:{remnants:Remnant[]}){
    downloadText(exportPilotCsv(trials),'meditera-osb-pilot-physical-checks.csv','text/csv;charset=utf-8');
  }
  function exportJson(){
-   downloadText(JSON.stringify({schema:'meditera-osb-pilot-validation-v1',createdAt:new Date().toISOString(),
+   downloadText(JSON.stringify({schema:'meditera-osb-pilot-validation-v2',createdAt:new Date().toISOString(),
      note:'All actualWidthMm/actualHeightMm entries are operator-provided independent physical measurements.',
-     stats:summary,trials},null,2),'meditera-osb-pilot-physical-checks.json','application/json');
+     stats:summary,trials,edgeChecks},null,2),'meditera-osb-pilot-physical-checks.json','application/json');
  }
  return <div className="pilot-page">
    <header className="page-header">
@@ -162,5 +164,6 @@ export default function PilotValidation({remnants}:{remnants:Remnant[]}){
          Nijedan zapis automatski ne mijenja status u VERIFIED.</p></div>
      </section>
    </div>
+   <LocalEdgeValidation key={remnant?.id||'none'} remnant={remnant}/>
  </div>;
 }

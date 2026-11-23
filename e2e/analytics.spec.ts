@@ -48,5 +48,9 @@ test('analytics is accessible on mobile, no fabricated savings and no horizontal
   }));
   expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewport);
   await expect(page.locator('.inventory-insight-metric-value').first()).toContainText('0');
+  // Allow the existing responsive sidebar transition to finish before visual capture.
+  await page.locator('.sidebar').evaluate(async element => {
+    await Promise.all(element.getAnimations().map(animation => animation.finished.catch(() => undefined)));
+  });
   await page.screenshot({ path: 'test-results/analytics-mobile.png', fullPage: true });
 });

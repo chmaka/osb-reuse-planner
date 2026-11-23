@@ -68,6 +68,12 @@ test('manual inner hole and separate defect are preserved and subtracted from us
   for(const [x,y] of [[.26,.3],[.39,.3],[.39,.46],[.26,.46]])await click(x,y);
   await page.getByRole('button',{name:/Završi otvor/}).click();
   await page.getByLabel('Sloj konture').selectOption('defect');
+  // Deliberately invalid defect lies outside the outer OSB contour: must block saving.
+  for(const [x,y] of [[.91,.86],[.97,.86],[.97,.95],[.91,.95]])await click(x,y);
+  await page.getByRole('button',{name:/Završi oštećenje/}).click();
+  await expect(page.getByText(/Otvor ili oštećenje nije potpuno unutar/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'})).toBeDisabled();
+  await page.locator('.exclusion-row').filter({hasText:'Oštećenje 1'}).getByRole('button',{name:'Ukloni'}).click();
   for(const [x,y] of [[.60,.55],[.72,.55],[.72,.69],[.60,.69]])await click(x,y);
   await page.getByRole('button',{name:/Završi oštećenje/}).click();
   await expect(page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'})).toBeEnabled();

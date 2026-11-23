@@ -73,12 +73,12 @@ test('manual inner hole and separate defect are preserved and subtracted from us
   await page.getByRole('button',{name:/Završi otvor/}).click();
   console.log('TRACE: completed hole');
   await page.getByLabel('Sloj konture').selectOption('defect');
-  // Deliberately invalid defect lies outside the outer OSB contour: must block saving.
-  for(const [x,y] of [[.91,.86],[.97,.86],[.97,.95],[.91,.95]])await click(x,y);
+  // Deliberately invalid defect overlaps an existing hole: must block saving.
+  for(const [x,y] of [[.29,.33],[.35,.33],[.35,.41],[.29,.41]])await click(x,y);
   console.log('TRACE: completed invalid defect drawing');
   await page.getByRole('button',{name:/Završi oštećenje/}).click();
   console.log('TRACE: invalid region expected');
-  await expect(page.getByText(/Otvor ili oštećenje nije potpuno unutar/)).toBeVisible();
+  await expect(page.getByText(/Otvori i oštećenja se sijeku ili dodiruju/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'})).toBeDisabled();
   console.log('TRACE: invalid region rejected, removing');
   await page.locator('.exclusion-row').filter({hasText:'Oštećenje 1'}).getByRole('button',{name:'Ukloni'}).click();

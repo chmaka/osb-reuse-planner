@@ -22,6 +22,7 @@ test('analytics reads local inventory with filters, grouping and aggregate CSV',
   await expect(page.getByRole('region', { name: 'Analitika inventara' })).toContainText('Broj zapisa');
   await expect(page.locator('.inventory-insight-metric-value').first()).toContainText('2');
   await expect(page.locator('.inventory-insight-status[data-status="MEASURED"] b')).toHaveText('1');
+  await page.screenshot({ path: 'test-results/analytics-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Materijal', exact: true }).click();
   await expect(page.locator('.inventory-insight-bar-row')).toHaveCount(2);
   await page.getByRole('combobox', { name: 'Debljina materijala' }).selectOption('18');
@@ -47,4 +48,5 @@ test('analytics is accessible on mobile, no fabricated savings and no horizontal
   }));
   expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewport);
   await expect(page.locator('.inventory-insight-metric-value').first()).toContainText('0');
+  await page.screenshot({ path: 'test-results/analytics-mobile.png', fullPage: true });
 });

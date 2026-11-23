@@ -280,7 +280,12 @@ function Scan({onSaved}:{onSaved:()=>void}){
     finally{setProcessing(false)}
   }
   function addPoint(e:ReactPointerEvent<SVGSVGElement>){
-    if(!image||!dimensions.w||segmenting)return;
+    if(!image||!dimensions.w)return;
+    // Manual interaction takes priority over an in-flight automatic scan.
+    if(segmenting){
+      segmentGeneration.current++;setSegmenting(false);
+      setAutoProgress('Auto-skeniranje je prekinuto ručnim uređivanjem.');
+    }
     const p=fromPointer(e);
     if(p.x<0||p.y<0||p.x>dimensions.w||p.y>dimensions.h)return;
     if(mode==='scale'){

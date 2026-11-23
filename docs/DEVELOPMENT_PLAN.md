@@ -55,3 +55,10 @@ Software functionality is implemented in the pilot but **not accepted for CNC**.
 - Separate statistics (MAE, RMSE, nearest-rank P95 and worst absolute length error) and CSV/JSON exports. Previous v3 width-height metrics and inventory state remain unchanged.
 - Scope is point-to-point **straight-line** distances only, not entire contour displacement or camera reprojection bias. No physical data is generated automatically; at least 20 real OSB offcuts and verified Cut2D imports are still a release gate.
 - Subsequent: capture real Android samples and selected contour points with a ruler in the image; compare multiple views from different angles/lighting; evaluate optic distortion and model runtime on real Android, then a separate CNC-safe solver/export gate.
+
+### Phase 5.3 — Complete browser backup and loss prevention (2026-11-23)
+- Existing Dexie v4 tables saved in one read-only snapshot; binary original and normalized images are Base64-encoded without conversion, each protected by SHA-256. All seven tables plus source version/time are protected by a structured manifest digest.
+- Restore reads and verifies entire archive before any write, previews record counts, and requires explicit operator approval; existing identical IDs are skipped, conflicting IDs fail hard without overwrites; missing rows are added in one atomic multi-table transaction.
+- No file is transmitted to an API. Backup remains unencrypted JSON with photo limits for Android memory safety.
+- Backward compatibility: previous IndexedDB remains untouched, no migration required for backup module. Full backup not a substitute for external secure copy or manual production acceptance.
+- Next field gate: physically measure 20 different offcuts and multiple edge spans; verify entire backup restore onto a second real Android/desktop device with photos and scan drafts. Large dataset backup or multi-device sync not implemented.

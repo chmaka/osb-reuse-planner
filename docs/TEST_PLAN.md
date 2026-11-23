@@ -24,3 +24,8 @@ Physical acceptance still pending: 20 real 18mm OSB scraps, separate validation 
 - Pure geometry unit tests: Re:bble 0.75 offset prompt points, bounded coordinates, binary mask contour extraction, ignore marker's false black/quiet-zone hole while preserving real holes, metric area and impossible masks.
 - E2E: synthetic photo containing in-app MIP36h12 marker on contrasting sheet should auto-find marker, populate mm measurements, and keep save disabled pending independent control and review. Test missing-marker path explicitly fails with no invented mm.
 - AI SlimSAM WebGPU inference not covered by synthetic CI: requires real-device demo with fetched model on Android/desktop. The local fallback is testable but is not evidence the model ran.
+
+## Phase 5 pilot evidence
+- Unit tests: measured-vs-scan signed and absolute errors, finite/positive input guards, zero-record summaries as null, 20-distinct-remnant accounting, mean absolute error, root mean square error and nearest-rank P95; safe CSV formatting.
+- Playwright: programmatically seed a *synthetic fixture* remnant, open the Validacija UI, record operator dimensions, verify persistence across reload, repeat the same offcut without increasing 20-item sample progress, report larger-than-threshold error, download CSV, confirm original remnant status remains MEASURED.
+- Physical study remains unperformed. No statistical claims are based on seeded browser fixtures or mock imagery.

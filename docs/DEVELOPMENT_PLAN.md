@@ -42,3 +42,9 @@ Software functionality is implemented in the pilot but **not accepted for CNC**.
 - Measurement state warns that marker size is a manually supplied measured reference, not extracted magically from camera. Real mm cannot be calculated without a physical reference.
 - Non-negotiable: independent check length and explicit operator review still gate saving; production DXF remains reference only until independently validated.
 - Acceptance pending: characterize edge errors and optics across 20 real offcuts, test model downloads and WebGPU on target phones; compare SlimSAM vs classical masks with manual gauge ground truth; review licensing/size of bundled assets.
+
+### Phase 5.1 — Evidence-based workshop QA (2026-11-23)
+- Versioned IndexedDB schema v3 adds independent operator-measured physical width/height trial records for an existing remnant, plus geometry/revision snapshot, date, device, lighting and reference tool. Does not modify stock status.
+- User-facing Validacija panel, per-trial signed errors, warning classification, summary MAE/RMSE/P95 and 20-unique-OSB pilot progress (repeats do not count toward sample target).
+- CSV/JSON export and explicit 'no evidence' state; no quality or accuracy is asserted from synthetic tests.
+- Next acceptance: sample 20 physical irregular OSB remnants in workshop, take repeat photos with variable perspective/light, record independent dimensions and edge measurements, test SlimSAM on target Android phones, inspect 3 reference DXF outputs in Cut2D with operator. All quality claims remain conditional until such data exists.

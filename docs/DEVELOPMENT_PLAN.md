@@ -29,3 +29,9 @@ Do not advance phase status until acceptance tests and human evidence exist.
 
 ### Phase 2 release gate
 Software functionality is implemented in the pilot but **not accepted for CNC**. Release is contingent on all GitHub Action checks, real Android and desktop camera checks, printed ArUco sample scaling, independent gauge checks across at least 20 actual OSB offcuts, and documented measurement error distribution. No approval is inferred by mathematical tests.
+
+### Phase 3 (2026-11-23): browser segmentation MVP
+- Background-color separation with robust border sample, adjustable threshold, largest 4-connected region, 3×3 majority denoising, traced outer boundary and internal holes; runs in a dedicated `segment.worker.ts` on a downsampled image (longest side ≤720 px).
+- The algorithm is a classical heuristic for **contrasting OSB material against a different background**. It is not semantic AI/SAM2/OpenCV, may fail on timber/complex floor backgrounds, cannot infer hidden edges, and does not estimate measurement certainty. Explicit user review checkbox gates saving AI/classical auto suggestions.
+- Separate user-approved holes and defects with free-form polygon tracing, drag-to-correct existing vertices and point insertion/removal. Production blockers: self-intersection, outside/touching/crossing exclusions, overlaps, unclosed drafts. Usable area excludes all valid hole and defect areas; original source image and inspection status remain local.
+- A known deficiency: editable draft geometry should be persisted across reloads with versioned scan records (planned next). Human workshop acceptance still pending.

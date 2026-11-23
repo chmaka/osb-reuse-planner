@@ -10,6 +10,10 @@ export interface Remnant {
   holesMm: Polygon[];
   defectsMm: Polygon[];
   areaMm2: number;
+  segmentation?: {
+    algorithm:string; threshold:number; coverage:number;pixelStep:number;
+    reviewed:boolean;edited:boolean;manualCorrections:boolean;notes:string[]
+  };
   location: string;
   status: RemnantStatus;
   imageId?: string;

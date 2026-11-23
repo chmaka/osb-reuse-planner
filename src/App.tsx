@@ -127,7 +127,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const [segmentThreshold,setSegmentThreshold]=useState('55');
   const [foregroundSeed,setForegroundSeed]=useState<Point|null>(null);
   const [pickSeed,setPickSeed]=useState(false);
-  const [segmentation,setSegmentation]=useState<{algorithm:string;threshold:number;coverage:number;pixelStep:number;reviewed:boolean;notes:string[]}|null>(null);
+  const [segmentation,setSegmentation]=useState<{algorithm:string;threshold:number;coverage:number;pixelStep:number;reviewed:boolean;edited:boolean;notes:string[]}|null>(null);
   const [proposedHoles,setProposedHoles]=useState<Point[][]>([]);
   const [knownDistance,setKnownDistance]=useState('100');
   const [name,setName]=useState('');
@@ -247,7 +247,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
       else if(calMode==='rectangle')setQuadPoints(points=>points.length<4?[...points,p]:[p]);
     }else if(mode==='check')setCheckPoints(points=>points.length<2?[...points,p]:[p]);
     else if(pickSeed){setForegroundSeed(p);setPickSeed(false)}
-    else if(drawLayer!=='outer')setDraft(points=>[...points,p]);
+    else if(drawLayer!=='outer'){setDraft(points=>[...points,p]);setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s);}
     else if(editTool==='insert'&&contour.length>=3){
       let index=-1,nearest=Infinity;
       for(let i=0;i<contour.length;i++){
@@ -257,9 +257,11 @@ function Scan({onSaved}:{onSaved:()=>void}){
         const distance=Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);
         if(distance<nearest){nearest=distance;index=i}
       }
-      if(nearest<Math.max(18,dimensions.w/40)&&index>=0)
+      if(nearest<Math.max(18,dimensions.w/40)&&index>=0){
         setContour(points=>[...points.slice(0,index+1),p,...points.slice(index+1)]);
-    } else setContour(points=>[...points,p]);
+        setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s);
+      }
+    } else {setContour(points=>[...points,p]);setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s)}
   }
   async function autoSegment(){
     if(!image||!calibrated)return;
@@ -273,14 +275,14 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setHoles([]);setDefects([]);setDraft([]);setSelectedVertex(null);
       setDrawLayer('outer');setEditTool('draw');setMode('trace');
       setSegmentation({algorithm:result.algorithm,threshold,coverage:result.coverage,
-        pixelStep:result.pixelStep,reviewed:false,notes:result.warnings});
+        pixelStep:result.pixelStep,reviewed:false,edited:false,notes:result.warnings});
     }catch(error){setCaptureError('Automatska kontura nije prihvaćena: '+String(error))}
     finally{setSegmenting(false)}
   }
   function acceptProposedHoles(){
     if(!proposedHoles.length)return;
     setHoles(existing=>[...existing,...proposedHoles]);
-    setProposedHoles([]);setSegmentation(s=>s?{...s,reviewed:false}:s);
+    setProposedHoles([]);setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s);
   }
   function finishExclusion(){
     if(draft.length<3||!isSimple(draft)){
@@ -361,7 +363,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
       const now=new Date().toISOString(),id=crypto.randomUUID(),imageId=scanRef?.imageId||crypto.randomUUID();
       await storeScan({id,label:name.trim()||'OSB ostatak '+id.slice(0,6),material:'OSB',
         thicknessMm:Number(thickness),polygonMm:polyMm,holesMm:exclusionsMm.holes,defectsMm:exclusionsMm.defects,
-        areaMm2:netArea,segmentation:segmentation?{...segmentation,manualCorrections:true}:undefined,
+        areaMm2:netArea,segmentation:segmentation?{...segmentation,manualCorrections:segmentation.edited}:undefined,
         location:location.trim()||'Nepoznato',status:'MEASURED',
         calibrationMethod:calibration?.method||'two-point-manual',
         mmPerPx:calibration?null:mmPerPx,calibration:calibration?{
@@ -550,7 +552,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
           {drawLayer==='outer'?<div className="action-row">
             <button className="secondary" onClick={()=>{setEditTool(editTool==='draw'?'insert':'draw');setMode('trace')}}>
               {editTool==='insert'?'Vrati crtanje':'Dodaj teme na ivici'}</button>
-            <button className="secondary" disabled={!contour.length} onClick={()=>{setContour([]);setSegmentation(null);setProposedHoles([]);setSelectedVertex(null)}}>
+            <button className="secondary" disabled={!contour.length} onClick={()=>{setContour([]);setHoles([]);setDefects([]);setDraft([]);setSegmentation(null);setProposedHoles([]);setSelectedVertex(null)}}>
               Očisti konturu</button>
           </div>:<div className="action-row">
             <button className="primary" disabled={draft.length<3} onClick={finishExclusion}>

@@ -115,7 +115,6 @@ function largestComponent(mask:Uint8Array,w:number,h:number,seed?:Point):{mask:U
  for(const i of selected)result[i]=1;
  return {mask:result,size:bestSize};
 }
-interface Edge {from:number;to:number}
 export function traceMask(mask:Uint8Array,w:number,h:number):Polygon[]{
  if(w<2||h<2||mask.length!==w*h||w>=65536||h>=65536)return [];
  const edgeMap=new Map<number,number[]>();
@@ -154,7 +153,7 @@ export function segmentOffcut(input:PixelBuffer,options:SegmentationOptions):Seg
  if(!Number.isFinite(options.threshold)||options.threshold<10||options.threshold>200)
    throw Error('Prag segmentacije mora biti 10–200.');
  const [br,bg,bb]=backgroundColor(input);
- let mask=new Uint8Array(w*h);
+ let mask:Uint8Array=new Uint8Array(w*h);
  for(let i=0;i<mask.length;i++){
    const k=4*i,dr=pixels[k]-br,dg=pixels[k+1]-bg,db=pixels[k+2]-bb;
    const distance=Math.sqrt(.3*dr*dr+.59*dg*dg+.11*db*db);

@@ -20,6 +20,8 @@ import { makeProjectiveCalibration, projectPoint, mapContourToMm, checkIndepende
 import type { ProjectiveCalibration, Quad } from './features/calibration/homography';
 import { proposeSegmentation } from './features/segmentation/run';
 import type { SegmentationCandidate } from './features/segmentation/segment';
+import { inferMarkerSamMask } from './features/segmentation/sam';
+import { markerPromptPoints, maskToRebbleContours, metricDimensions, removeMarkerOcclusions } from './features/segmentation/rebble';
 import type { SolveInput } from './solver';
 
 type Page = 'dashboard'|'scan'|'inventory'|'nesting'|'production'|'analytics'|'settings';
@@ -125,6 +127,10 @@ function Scan({onSaved}:{onSaved:()=>void}){
   const dragged=useRef<{layer:'outer'|'hole'|'defect'|'draft';ring:number;index:number}|null>(null);
   const segmentGeneration=useRef(0);
   const [segmenting,setSegmenting]=useState(false);
+  const [autoOnUpload,setAutoOnUpload]=useState(true);
+  const [scanEngine,setScanEngine]=useState<'fast'|'sam'>('fast');
+  const [autoProgress,setAutoProgress]=useState('');
+  const [autoReport,setAutoReport]=useState<{marker:number;widthMm:number;heightMm:number;areaMm2:number;method:string}|null>(null);
   const [segmentThreshold,setSegmentThreshold]=useState('55');
   const [foregroundSeed,setForegroundSeed]=useState<Point|null>(null);
   const [pickSeed,setPickSeed]=useState(false);
@@ -237,7 +243,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setImage(prepared.preview);setQuality(prepared.quality);
       setScanRef(saved);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);
       setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setForegroundSeed(null);
-      setMode('scale');setShowCorrected(false);
+      setMode('scale');setShowCorrected(false);setAutoReport(null);
+      if(autoOnUpload)void autoScanImage(prepared.preview,scanEngine,Number(markerSize),prepared.width,prepared.height);
     }catch(error){
       setCaptureError('Fotografija nije obrađena: '+String(error));
       throw error;
@@ -267,7 +274,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
       setSegmentThreshold(saved?.segmentThreshold||'55');
       setDrawLayer(saved?.drawLayer||'outer');setName(saved?.name||'');
       setLocation(saved?.location||'Radionica');setThickness(saved?.thickness||'18');
-      setMode(saved?.mode||'scale');setShowCorrected(false);
+      setMode(saved?.mode||'scale');setShowCorrected(false);setAutoReport(null);
       setScanRef({id:record.id,imageId:record.imageId});
     }catch(error){setCaptureError(String(error))}
     finally{setProcessing(false)}
@@ -296,6 +303,72 @@ function Scan({onSaved}:{onSaved:()=>void}){
         setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s);
       }
     } else {setContour(points=>[...points,p]);setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s)}
+  }
+  async function autoScanImage(photo:Blob,engine:'fast'|'sam',sizeMm:number,
+    width=dimensions.w,height=dimensions.h):Promise<void>{
+    const token=++segmentGeneration.current;
+    setSegmenting(true);setCaptureError('');setAutoReport(null);
+    setAutoProgress('Automatski prepoznajem ArUco marker...');
+    try{
+      if(!Number.isFinite(sizeMm)||sizeMm<20||sizeMm>400)
+        throw Error('Prvo izmjeri stranicu crnog kvadrata i unesi veličinu 20–400 mm.');
+      const candidates=await detectAruco(photo);
+      if(token!==segmentGeneration.current)return;
+      const ranked=candidates.slice().sort((a,b)=>a.hammingDistance-b.hammingDistance||
+        area(b.corners)-area(a.corners));
+      setMarkers(ranked);
+      if(!ranked.length){
+        setChosenMarker(null);setCalMode('marker');setMode('scale');
+        throw Error('ArUco marker nije pronađen. Cijeli marker mora biti vidljiv na OSB-u. Koristi marker iz aplikacije, ne originalni Re:bble 4×4/5×5/6×6.');
+      }
+      const selected=ranked[0],metric=makeProjectiveCalibration('aruco-single',
+        selected.corners,sizeMm,sizeMm,selected.id);
+      setCalMode('marker');setChosenMarker(selected.id);setMarkerSize(String(sizeMm));
+      setCheckPoints([]);setDraft([]);setHoles([]);setDefects([]);
+      setAutoProgress(engine==='sam'?'Pokrećem SlimSAM, model se prvi put preuzima...':'Izdvajam oblik iz pozadine...');
+      let result:SegmentationCandidate;
+      let fallback='';
+      if(engine==='sam'){
+        try{
+          const mask=await inferMarkerSamMask(photo,selected,message=>{
+            if(token===segmentGeneration.current)setAutoProgress(message);
+          });
+          const inferred=maskToRebbleContours(mask,selected);
+          result={outer:inferred.outer,holes:inferred.holes,coverage:inferred.coverage,
+            pixelStep:inferred.pixelStep,warnings:inferred.warnings,algorithm:inferred.algorithm};
+        }catch(error){
+          fallback='SlimSAM nije uspio: '+String(error)+'. Primijenjen je kontrastni metod.';
+          const seed=markerPromptPoints(selected,width,height)[0];
+          result=await proposeSegmentation(photo,Number(segmentThreshold),seed);
+          result={...result,algorithm:'rebble-auto-contrast-fallback-v1'};
+        }
+      }else{
+        const seed=markerPromptPoints(selected,width,height)[0];
+        result=await proposeSegmentation(photo,Number(segmentThreshold),seed);
+        result={...result,algorithm:'rebble-auto-contrast-v1'};
+      }
+      if(token!==segmentGeneration.current)return;
+      if(!isSimple(result.outer)||area(result.outer)<area(selected.corners)*1.15)
+        throw Error('Nije prepoznata cijela OSB ploča (detektovan samo marker ili pogrešan obod).');
+      const holes=removeMarkerOcclusions(result.holes,selected,Math.max(8,result.pixelStep*4));
+      const real=metricDimensions(mapContourToMm(result.outer,metric.pixelToMm));
+      if(real.widthMm>20000||real.heightMm>20000)
+        throw Error('Dimenzije su nerealne; ponovi fotografiju i provjeri marker.');
+      setContour(result.outer);setProposedHoles(holes);
+      setSegmentation({algorithm:result.algorithm,threshold:Number(segmentThreshold),
+        coverage:result.coverage,pixelStep:result.pixelStep,reviewed:false,edited:false,
+        notes:[...result.warnings,...(fallback?[fallback]:[])]});
+      setAutoReport({marker:selected.id,widthMm:real.widthMm,heightMm:real.heightMm,
+        areaMm2:real.outerAreaMm2,method:result.algorithm});
+      setDrawLayer('outer');setEditTool('draw');setSelectedVertex(null);
+      setMode('trace');
+      setAutoProgress('Obod i dimenzije u mm su izračunati. Provjeri kalibraciju i nezavisnu kontrolnu dužinu.');
+    }catch(error){
+      if(token===segmentGeneration.current){
+        setAutoProgress('Automatski postupak nije završen.');
+        setCaptureError('Auto-sken: '+String(error));
+      }
+    }finally{if(token===segmentGeneration.current)setSegmenting(false)}
   }
   async function autoSegment(){
     if(!image||!calibrated)return;
@@ -388,7 +461,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
     }catch(error){setCaptureError('Marker nije generisan: '+String(error))}
   }
   function changeCalibration(next:'line'|'rectangle'|'marker'){
-    segmentGeneration.current++;setSegmenting(false);setPickSeed(false);
+    segmentGeneration.current++;setSegmenting(false);setPickSeed(false);setAutoReport(null);
     setCalMode(next);setRefPoints([]);setQuadPoints([]);setMarkers([]);setChosenMarker(null);
     setContour([]);setCheckPoints([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);
     setMode('scale');setShowCorrected(false);setCaptureError('');
@@ -426,7 +499,7 @@ function Scan({onSaved}:{onSaved:()=>void}){
             <button className={mode==='trace'?'tab active':'tab'} onClick={()=>setMode('trace')} disabled={!calibrated}><Focus size={15}/> 3. Kontura</button>
           </div><div className="toolbar-right">
             <button title="Poništi posljednju tačku" className="icon-btn" onClick={()=>{mode==='scale'?(calMode==='line'?setRefPoints(p=>p.slice(0,-1)):setQuadPoints(p=>p.slice(0,-1))):mode==='check'?setCheckPoints(p=>p.slice(0,-1)):drawLayer==='outer'?setContour(p=>p.slice(0,-1)):setDraft(p=>p.slice(0,-1));setSegmentation(s=>s?{...s,reviewed:false,edited:true}:s)}}><RotateCcw size={17}/></button>
-            <button title="Nova fotografija" className="icon-btn" onClick={()=>{segmentGeneration.current++;setSegmenting(false);setPickSeed(false);setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
+            <button title="Nova fotografija" className="icon-btn" onClick={()=>{segmentGeneration.current++;setSegmenting(false);setPickSeed(false);setAutoReport(null);setImage(null);setContour([]);setHoles([]);setDefects([]);setDraft([]);setProposedHoles([]);setSegmentation(null);setRefPoints([]);setQuadPoints([]);setCheckPoints([]);setMarkers([]);setChosenMarker(null);setScanRef(null);setQuality(null)}}><Trash2 size={17}/></button>
           </div></div>
           <div className="editor-stage">
             <svg viewBox={'0 0 '+dimensions.w+' '+dimensions.h} className="photo-svg" onPointerDown={addPoint} onPointerMove={moveDrag} onPointerUp={()=>{dragged.current=null}} onPointerCancel={()=>{dragged.current=null}} style={{touchAction:"none"}}>

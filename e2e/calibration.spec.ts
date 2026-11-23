@@ -16,9 +16,14 @@ test('projective four-corner calibration requires independent check, then persis
  await page.getByLabel('Metoda kalibracije').selectOption('rectangle');
  await page.getByLabel('Širina reference').fill('200');
  await page.getByLabel('Visina reference').fill('300');
- const svg=page.locator('svg.photo-svg');const bounds=await svg.boundingBox();
- if(!bounds)throw Error('Missing calibration SVG');
- const click=async(x:number,y:number)=>page.mouse.click(bounds.x+x*bounds.width,bounds.y+y*bounds.height);
+ const svg=page.locator('svg.photo-svg');
+ const click=async(x:number,y:number)=>{
+   // Right-hand inspector may scroll while changing calibration/check lengths.
+   await svg.scrollIntoViewIfNeeded();
+   const bounds=await svg.boundingBox();
+   if(!bounds)throw Error('Missing calibration SVG');
+   await page.mouse.click(bounds.x+x*bounds.width,bounds.y+y*bounds.height);
+ };
  for(const [x,y] of [[.1,.1],[.6,.1],[.6,.8],[.1,.8]])await click(x,y);
  await expect(page.getByRole('button',{name:/3\. Kontura/})).toBeEnabled();
  await page.getByRole('button',{name:/2\. Kontrola/}).click();

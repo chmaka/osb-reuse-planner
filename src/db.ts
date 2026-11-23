@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Remnant, ImageAsset, Part, AuditEvent, ScanRecord, PhotoSource, ValidationTrial } from './types';
+import type { Remnant, ImageAsset, Part, AuditEvent, ScanRecord, PhotoSource, ValidationTrial, EdgeCheck } from './types';
 export const db = new Dexie('meditera-osb-reuse-lab') as Dexie & {
   remnants: EntityTable<Remnant,'id'>;
   images: EntityTable<ImageAsset,'id'>;
@@ -7,6 +7,7 @@ export const db = new Dexie('meditera-osb-reuse-lab') as Dexie & {
   audit: EntityTable<AuditEvent,'id'>;
   scans: EntityTable<ScanRecord,'id'>;
   validation: EntityTable<ValidationTrial,'id'>;
+  edgeChecks: EntityTable<EdgeCheck,'id'>;
 };
 db.version(1).stores({
   remnants: 'id, material, thicknessMm, location, status, createdAt',
@@ -29,6 +30,46 @@ db.version(3).stores({
   scans:'id, status, createdAt, imageId',
   validation:'id, remnantId, at, algorithm'
 });
+db.version(4).stores({
+  remnants:'id, material, thicknessMm, location, status, createdAt',
+  images:'id, createdAt',parts:'id, material, thicknessMm',
+  audit:'id, at, entityId',scans:'id, status, createdAt, imageId',
+  validation:'id, remnantId, at, algorithm',
+  edgeChecks:'id, remnantId, at, ringKind'
+});
+/** Save a local physical edge/span check; never alter the original remnant or its status. */
+export async function recordEdgeCheck(input:{
+ remnantId:string;ringKind:EdgeCheck['ringKind'];ringIndex:number;
+ fromVertex:number;toVertex:number;physicalMm:number;toleranceMm:number;
+ referenceMethod:string;notes:string;
+}):Promise<EdgeCheck>{
+ const {measuredSpan,checkEdgeLength}=await import('./features/validation/edge-check');
+ let stored:EdgeCheck|undefined;
+ await db.transaction('rw',db.remnants,db.edgeChecks,db.audit,async()=>{
+   const remnant=await db.remnants.get(input.remnantId);
+   if(!remnant)throw Error('Ostatak nije pronađen u inventaru.');
+   const snapshot=measuredSpan(remnant,input.ringKind,input.ringIndex,input.fromVertex,input.toVertex);
+   if(!input.referenceMethod.trim())throw Error('Navedi nezavisni instrument.');
+   const edge:EdgeCheck={
+     id:crypto.randomUUID(),at:new Date().toISOString(),
+     remnantId:remnant.id,remnantLabel:remnant.label,remnantRevision:remnant.revision,
+     algorithm:remnant.segmentation?.algorithm||'manual',
+     ringKind:snapshot.ringKind,ringIndex:snapshot.ringIndex,
+     fromVertex:snapshot.fromVertex,toVertex:snapshot.toVertex,
+     from:snapshot.points[0],to:snapshot.points[1],scannedMm:snapshot.scannedMm,
+     physicalMm:input.physicalMm,toleranceMm:input.toleranceMm,
+     referenceMethod:input.referenceMethod.trim().slice(0,120),
+     notes:input.notes.trim().slice(0,1000)
+   };
+   checkEdgeLength(edge);
+   await db.edgeChecks.add(edge);
+   await db.audit.add({id:crypto.randomUUID(),at:edge.at,action:'PILOT_LOCAL_EDGE_CHECK',
+     entityId:remnant.id,detail:'Measured local vertex span on '+edge.ringKind+' ring; status unchanged'});
+   stored=edge;
+ });
+ if(!stored)throw Error('Provjera lokalne dužine nije sačuvana.');
+ return stored;
+}
 /** Independently measured physical dimensions. Never changes remnant verification status. */
 export async function recordValidation(input:{
   remnantId:string;actualWidthMm:number;actualHeightMm:number;toleranceMm:number;

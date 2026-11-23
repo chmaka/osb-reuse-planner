@@ -78,3 +78,14 @@ export interface ValidationTrial {
   actualWidthMm:number;actualHeightMm:number;toleranceMm:number;
   device:string;lighting:string;referenceMethod:string;notes:string;
 }
+
+/** Operator-measured local length between two existing vertices on a saved ring.
+ * Stored as immutable numerical evidence; does not mean accurate edge shape or CNC approval.
+ */
+export interface EdgeCheck {
+ id:string;at:string;remnantId:string;remnantLabel:string;remnantRevision:number;
+ algorithm:string;ringKind:'outer'|'hole'|'defect';ringIndex:number;
+ fromVertex:number;toVertex:number;from:Point;to:Point;
+ scannedMm:number;physicalMm:number;toleranceMm:number;
+ referenceMethod:string;notes:string;
+}

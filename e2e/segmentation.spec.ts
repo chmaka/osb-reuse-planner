@@ -13,9 +13,15 @@ async function uploadSynthetic(page:import('@playwright/test').Page,withHole:boo
     name:'phase3-synthetic.png',mimeType:'image/png',buffer:Buffer.from(data,'base64')
   });
   await expect(page.locator('svg.photo-svg')).toBeVisible();
-  const rect=await page.locator('svg.photo-svg').boundingBox();
-  if(!rect)throw Error('Photo editor not visible');
-  return async(x:number,y:number)=>page.mouse.click(rect.x+rect.width*x,rect.y+rect.height*y);
+  return async(x:number,y:number)=>{
+    const svg=page.locator('svg.photo-svg');
+    // Switching inspector controls may scroll the document on compact displays.
+    // Never reuse viewport coordinates captured before a scroll.
+    await svg.scrollIntoViewIfNeeded();
+    const rect=await svg.boundingBox();
+    if(!rect)throw Error('Photo editor not visible');
+    await page.mouse.click(rect.x+rect.width*x,rect.y+rect.height*y);
+  };
 }
 async function allRemnants(page:import('@playwright/test').Page){
   return page.evaluate(async()=>{

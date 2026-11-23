@@ -60,23 +60,33 @@ test('automatic local segmentation and holes: requires operator review, stores e
 test('manual inner hole and separate defect are preserved and subtracted from usable area',async({page})=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Skeniranje'}).first().click();
+  console.log('TRACE: synthetic upload');
   const click=await uploadSynthetic(page,false);
+  console.log('TRACE: calibration');
   await click(.1,.1);await click(.3,.1);
   await page.getByRole('button',{name:/3\. Kontura/}).click();
   for(const [x,y] of [[.12,.15],[.88,.15],[.88,.82],[.12,.82]])await click(x,y);
+  console.log('TRACE: outer contour');
   await page.getByLabel('Sloj konture').selectOption('hole');
   for(const [x,y] of [[.26,.3],[.39,.3],[.39,.46],[.26,.46]])await click(x,y);
+  console.log('TRACE: hole points');
   await page.getByRole('button',{name:/Završi otvor/}).click();
+  console.log('TRACE: completed hole');
   await page.getByLabel('Sloj konture').selectOption('defect');
   // Deliberately invalid defect lies outside the outer OSB contour: must block saving.
   for(const [x,y] of [[.91,.86],[.97,.86],[.97,.95],[.91,.95]])await click(x,y);
+  console.log('TRACE: completed invalid defect drawing');
   await page.getByRole('button',{name:/Završi oštećenje/}).click();
+  console.log('TRACE: invalid region expected');
   await expect(page.getByText(/Otvor ili oštećenje nije potpuno unutar/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'})).toBeDisabled();
+  console.log('TRACE: invalid region rejected, removing');
   await page.locator('.exclusion-row').filter({hasText:'Oštećenje 1'}).getByRole('button',{name:'Ukloni'}).click();
   for(const [x,y] of [[.60,.55],[.72,.55],[.72,.69],[.60,.69]])await click(x,y);
   await page.getByRole('button',{name:/Završi oštećenje/}).click();
+  console.log('TRACE: valid defect drawn');
   await expect(page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'})).toBeEnabled();
+  console.log('TRACE: save enabled');
   await page.getByRole('button',{name:'Sačuvaj izmjereni ostatak'}).click();
   await expect(page.getByRole('heading',{name:'Inventar ostataka'})).toBeVisible();
   const rows=await allRemnants(page);

@@ -16,6 +16,14 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      - name: Save analytics UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osb-analytics-ui-preview
+          path: test-results/analytics-*.png
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Save browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

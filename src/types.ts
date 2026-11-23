@@ -70,3 +70,11 @@ export interface NestingResult {
   createdAt: string;
 }
 export interface AuditEvent { id: string; at: string; action: string; entityId: string; detail: string }
+/** Audit-only, externally measured bounding dimensions. A record never promotes a remnant to VERIFIED. */
+export interface ValidationTrial {
+  id:string;at:string;remnantId:string;remnantLabel:string;remnantRevision:number;
+  calibrationMethod:Remnant['calibrationMethod'];algorithm:string;
+  predictedWidthMm:number;predictedHeightMm:number;
+  actualWidthMm:number;actualHeightMm:number;toleranceMm:number;
+  device:string;lighting:string;referenceMethod:string;notes:string;
+}

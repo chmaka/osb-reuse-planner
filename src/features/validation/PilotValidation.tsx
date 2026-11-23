@@ -2,7 +2,6 @@ import {useMemo,useState} from 'react';
 import {useLiveQuery} from 'dexie-react-hooks';
 import {Activity,Download,ClipboardCheck,AlertTriangle,Save} from 'lucide-react';
 import {db,recordValidation} from '../../db';
-import {box} from '../../geometry';
 import {downloadText} from '../../dxf';
 import type {Remnant} from '../../types';
 import {evaluateTrial,exportPilotCsv,predictedBounds,summarizePilot} from './metrics';

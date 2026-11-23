@@ -23,6 +23,7 @@ import type { SegmentationCandidate } from './features/segmentation/segment';
 import { inferMarkerSamMask } from './features/segmentation/sam';
 import { markerPromptPoints, maskToRebbleContours, metricDimensions, removeMarkerOcclusions } from './features/segmentation/rebble';
 import type { SolveInput } from './solver';
+import SettingsBackup from './features/backup/SettingsBackup';
 import PilotValidation from './features/validation/PilotValidation';
 
 type Page = 'dashboard'|'scan'|'inventory'|'validation'|'nesting'|'production'|'analytics'|'settings';
@@ -846,10 +847,7 @@ function Analytics({remnants}:{remnants:Remnant[]}){
       <Metric title="Potvrđene uštede" value="—" Icon={Activity}/></div>
     <Notice>Ušteda materijala se ne može izračunati dok operater ne potvrdi fizički izveden rez i stvarne troškove.</Notice></>;
 }
-function SettingsPage(){
-  return <Planned title="Podešavanja" description="Lokalna konfiguracija, kopije i profili mjerenja."
-    items={['Kalibraciona tabla sa tačno definisanim razmjerama','Backup izvornog materijala i geometrije','Profili mašina i materijala','Opciona sinhronizacija više uređaja']}/>;
-}
+function SettingsPage(){return <SettingsBackup/>;}
 export default function App(){
   const [page,setPage]=useState<Page>('dashboard'),[menu,setMenu]=useState(false);
   const remnants=useLiveQuery(()=>db.remnants.toArray(),[])||[];
@@ -868,7 +866,7 @@ export default function App(){
     <div className="main-area">
       <div className="topbar"><button className="menu-toggle" aria-label="Otvori meni" onClick={()=>setMenu(!menu)}><Menu size={21}/></button>
         <div className="breadcrumb">MEDITERA <ChevronRight size={13}/> OSB REUSE LAB <ChevronRight size={13}/> <strong>{pages.find(p=>p.id===page)?.title}</strong></div>
-        <span className="version-pill">FAZA 5.2 · PILOT</span></div>
+        <span className="version-pill">FAZA 5.3 · PILOT</span></div>
       <main className="main-content">
         {page==='dashboard'&&<Dashboard remnants={remnants} onNavigate={go}/>}
         {page==='scan'&&<Scan onSaved={()=>go('inventory')}/>}

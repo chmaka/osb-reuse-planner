@@ -594,6 +594,8 @@ function Scan({onSaved}:{onSaved:()=>void}){
             <input aria-label="Stvarna veličina markera" type="number" min="20" max="400" step="any"
               value={markerSize} onChange={e=>setMarkerSize(e.target.value)}/>
           </div>
+          <button className="secondary full" onClick={()=>void downloadMarker()}>
+            Preuzmi ArUco marker (SVG za štampu)</button>
           <button className="primary full" disabled={!image||segmenting||processing}
             onClick={()=>image&&void autoScanImage(image,scanEngine,Number(markerSize))}>
             {segmenting?'Prepoznajem...':'Automatski prepoznaj oblik i mjere'}</button>

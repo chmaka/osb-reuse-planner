@@ -20,7 +20,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "heic-to": "^1.6.7",
-    "js-aruco2": "2.0.0"
+    "js-aruco2": "2.0.0",
+    "@huggingface/transformers": "3.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

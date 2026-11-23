@@ -23,8 +23,12 @@ export default defineConfig({
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // 3.2 MB HEIC decoder is downloaded and cached ONLY when needed.
-        globIgnores: ['**/assets/heic-to-*.js'],
+        globIgnores: ['**/assets/heic-to-*.js','**/assets/transformers-*.js','**/assets/ort-*.js'],
         runtimeCaching: [{
+          urlPattern: /\/assets\/(?:transformers|ort)-[^/]+\.js$/,
+          handler:'CacheFirst',
+          options:{cacheName:'ai-model-runtime-on-demand',expiration:{maxEntries:12,maxAgeSeconds:60*60*24*60}}
+        },{
           urlPattern: /\/assets\/heic-to-[^/]+\.js$/,
           handler: 'CacheFirst',
           options: {cacheName:'heic-decoder-on-demand',expiration:{maxEntries:3,maxAgeSeconds:60*60*24*90}}
